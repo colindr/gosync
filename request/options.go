@@ -1,15 +1,21 @@
-package transfer
+package request
 
-import "github.com/google/uuid"
+import (
+	"github.com/google/uuid"
+	"os"
+)
 
 // Direction - a Request is either for a pull or a push
-type Direction int
+type Type int
+
+// Local means requester will read and write data
+const Local Type = 0
 
 // Incoming means the requester wants to read data
-const Incoming Direction = 0
+const Incoming Type = 1
 
 // Outgoing means the requester wants to write data
-const Outgoing Direction = 0
+const Outgoing Type = 2
 
 // default block length
 const DefaultBlockLength int = 2048
@@ -21,12 +27,19 @@ type Request struct {
 	Host        string
 	Port        int
 
-	Direction   Direction
+	Type        Type
 
 	Path        string
 	Destination string
 
 	FollowLinks bool
+}
+
+
+type FileInfo struct {
+	FileInfo        os.FileInfo
+	SourcePath      string
+	DestinationPath string
 }
 
 // RequestResponse - response to a TransferRequest
