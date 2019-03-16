@@ -3,6 +3,7 @@ package daemon
 import (
 	"encoding/gob"
 	"fmt"
+	"github.com/colindr/gotests/gosync/request"
 	"net"
 
 	"github.com/colindr/gotests/gosync/transfer"
@@ -43,21 +44,20 @@ func handleConn(conn *net.Conn) {
 	// TODO: read a TransferRequest then write a TransferRequestResponse
 	decoder := gob.NewDecoder(*conn)
 
-	req := &transfer.Request{}
+	req := &request.Request{}
 
 	if err := decoder.Decode(req); err != nil {
 		fmt.Println("Error decoding transfer request:", err)
 		return
 	}
-	resp := &transfer.RequestResponse{
+	resp := &request.RequestResponse{
 		RequestID: req.RequestID,
 		Accepted:  true,
 	}
 
-	if req.Direction == transfer.Incoming {
+	if req.Type == request.Incoming {
 		// Pick a UDP port to listen on
 		resp.UDPPort = 30000
-		req.UDPPort = resp.UDPPort
 	}
 
 	encoder := gob.NewEncoder(*conn)

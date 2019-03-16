@@ -16,6 +16,7 @@ type Delta struct {
 	Len     int
 	Content []byte
 	Offset  int64
+	EOF     bool
 	NoOp    bool
 }
 
@@ -26,6 +27,8 @@ func Process( req request.Request, signatureChan <-chan signature.Checksum,
 	defer close (deltaChan)
 
 	fdmap := make(map[string]*os.File)
+
+	eofmap := make(map[string]int64)
 
 	buf := make([]byte, 4096)
 
@@ -43,6 +46,13 @@ func Process( req request.Request, signatureChan <-chan signature.Checksum,
 			f = openf
 		}
 
+		if fileEOF, ok := eofmap[sig.TransferFile.SourcePath]; ok {
+			// we've already hit the end of this file, don't make any
+			// more deltas
+			if sig.Offset >= fileEOF {
+				continue
+			}
+		}
 		// seek in the source file
 		if _, err := f.Seek(sig.Offset, 0); err != nil{
 			errChan <- err
@@ -79,6 +89,8 @@ func Process( req request.Request, signatureChan <-chan signature.Checksum,
 				return
 			}
 
+			// make EOF delta
+			deltaChan <- makeEOFDelta(sig, offset)
 			// done with this EOF sig, continue getting more sigs
 			continue
 
@@ -86,7 +98,10 @@ func Process( req request.Request, signatureChan <-chan signature.Checksum,
 
 		n, err := f.Read(buf)
 
-		if err != nil {
+		if err==io.EOF {
+			eofmap[sig.TransferFile.SourcePath] = sig.Offset
+			deltaChan <- makeEOFDelta(sig, sig.Offset)
+		} else if err != nil {
 			errChan <- err
 			close(errChan)
 			return
@@ -95,24 +110,30 @@ func Process( req request.Request, signatureChan <-chan signature.Checksum,
 		if n != sig.Len {
 			// sizes don't match, just return a copy
 			deltaChan <- makeCopyDelta(sig, buf, n, sig.Offset)
-			continue
+		} else {
+			h, err := signature.Signature(buf[:n])
+
+			if err != nil {
+				errChan <- err
+				close(errChan)
+				return
+			}
+
+			if !bytes.Equal(h.Sum(nil), sig.Sum.Sum(nil)) {
+				// sizes don't match, just return a dumb_delta
+				deltaChan <- makeCopyDelta(sig, buf, n, sig.Offset)
+			} else {
+				deltaChan <- makeNoCopyDelta(sig)
+			}
 		}
 
-		h, err := signature.Signature(buf[:n])
-
-		if err != nil {
-			errChan <- err
-			close(errChan)
-			return
+		if n < len(buf) {
+			// We've probably reached the end of the file, so
+			// make a EOFDelta and record the end
+			eofmap[sig.TransferFile.SourcePath] = sig.Offset + int64(n)
+			deltaChan <- makeEOFDelta(sig, sig.Offset + int64(n))
 		}
 
-		if !bytes.Equal(h.Sum(nil), sig.Sum.Sum(nil)) {
-			// sizes don't match, just return a dumb_delta
-			deltaChan <- makeCopyDelta(sig, buf, n, sig.Offset)
-			continue
-		}
-
-		deltaChan <- makeNoCopyDelta(sig)
 	}
 
 	return
@@ -133,6 +154,18 @@ func makeCopyDelta(sig signature.Checksum, buf []byte, length int, offset int64)
 
 }
 
+
+func makeEOFDelta(sig signature.Checksum, offset int64) Delta {
+	b := Delta{
+		Basis: sig.TransferFile.FileInfo,
+		Path:  sig.TransferFile.DestinationPath,
+		Len: 0,
+		Offset: offset,
+		EOF: true,
+	}
+
+	return b
+}
 
 func makeNoCopyDelta(sig signature.Checksum) Delta {
 
