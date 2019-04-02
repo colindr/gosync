@@ -1,12 +1,15 @@
-package request
+package transfer
 
 import (
+	"errors"
+	"fmt"
 	"github.com/google/uuid"
 	"os"
+	"path"
 )
 
 // Direction - a Request is either for a pull or a push
-type Type int
+type Type uint8
 
 // Local means requester will read and write data
 const Local Type = 0
@@ -33,6 +36,7 @@ type Request struct {
 	Destination string
 
 	FollowLinks bool
+	BlockSize   int
 }
 
 
@@ -48,4 +52,22 @@ type RequestResponse struct {
 	Reason    string
 	RequestID uuid.UUID
 	UDPPort   int
+}
+
+// Verify will return an error if there's anything
+// wrong with the request.  Currently only checks that
+// Path and Destination are absolute.
+func (req Request) Verify() error {
+
+	if ! path.IsAbs(req.Path){
+		return errors.New(fmt.Sprintf(
+			"Path attribute is not an absolute path: %v", req.Path))
+	}
+
+	if ! path.IsAbs(req.Destination){
+		return errors.New(fmt.Sprintf(
+			"Destination attribute is not an absolute path: %v", req.Destination))
+	}
+
+	return nil
 }

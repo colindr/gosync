@@ -3,7 +3,6 @@ package cmd
 import (
 	"bytes"
 	"fmt"
-	"github.com/colindr/gotests/gosync/daemon"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"os"
@@ -56,7 +55,7 @@ var rootCmd = &cobra.Command{
 	Long:  `An exercise in golang to sync files`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Start the gosync daemon
-		daemon.StartDaemon()
+		StartDaemon()
 	},
 }
 

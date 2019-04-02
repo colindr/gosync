@@ -1,9 +1,7 @@
-package delta
+package transfer
 
 import (
 	"bytes"
-	"github.com/colindr/gotests/gosync/request"
-	"github.com/colindr/gotests/gosync/signature"
 	"io"
 	"os"
 )
@@ -18,28 +16,27 @@ type Delta struct {
 	Offset  int64
 	EOF     bool
 	NoOp    bool
+	Done    bool
 }
 
 
-func Process( req request.Request, signatureChan <-chan signature.Checksum,
-	deltaChan chan<- Delta, errChan chan<- error , search bool )  {
+func ProcessDeltas( req *Request, manager Manager)  {
 
-	defer close (deltaChan)
+	defer manager.DeltaDone()
 
 	fdmap := make(map[string]*os.File)
 
 	eofmap := make(map[string]int64)
 
-	buf := make([]byte, 4096)
+	buf := make([]byte, req.BlockSize)
 
-	for sig := range signatureChan {
+	for sig := range manager.SignatureChannel() {
 		var f *os.File
 		f, ok := fdmap[sig.TransferFile.SourcePath]
 		if (!ok) {
 			openf, err := os.Open(sig.TransferFile.SourcePath)
 			if (err != nil) {
-				errChan <- err
-				close(errChan)
+				manager.ReportError(err)
 				return
 			}
 			fdmap[sig.TransferFile.SourcePath] = openf
@@ -53,12 +50,6 @@ func Process( req request.Request, signatureChan <-chan signature.Checksum,
 				continue
 			}
 		}
-		// seek in the source file
-		if _, err := f.Seek(sig.Offset, 0); err != nil{
-			errChan <- err
-			close(errChan)
-			return
-		}
 
 		if (sig.EOF) {
 			// This signature represents the end of the file
@@ -70,6 +61,12 @@ func Process( req request.Request, signatureChan <-chan signature.Checksum,
 			var err error
 			var n   int
 			for {
+				// seek in the source file
+				if _, err := f.Seek(offset, 0); err != nil{
+					manager.ReportError(err)
+					return
+				}
+
 				n, err = f.Read(buf)
 				// read until we error or get an EOF
 				if err != nil {
@@ -77,53 +74,58 @@ func Process( req request.Request, signatureChan <-chan signature.Checksum,
 				}
 
 				// make more copy deltas
-				deltaChan <- makeCopyDelta(sig, buf, n, offset)
+				manager.QueueDelta(makeCopyDelta(sig, buf, n, offset))
 
 				offset += int64(n)
 
 			}
 
 			if err != io.EOF {
-				errChan <- err
-				close(errChan)
+				manager.ReportError(err)
 				return
 			}
 
 			// make EOF delta
-			deltaChan <- makeEOFDelta(sig, offset)
+			manager.QueueDelta(makeEOFDelta(sig, offset))
 			// done with this EOF sig, continue getting more sigs
 			continue
-
 		}
+
+		// seek in the source file
+		if _, err := f.Seek(sig.Offset, 0); err != nil{
+			manager.ReportError(err)
+			return
+		}
+
+		// We don't want to READ *more* bytes than the sig.Len
+		buf = buf[:sig.Len]
 
 		n, err := f.Read(buf)
 
 		if err==io.EOF {
 			eofmap[sig.TransferFile.SourcePath] = sig.Offset
-			deltaChan <- makeEOFDelta(sig, sig.Offset)
+			manager.QueueDelta(makeEOFDelta(sig, sig.Offset))
 		} else if err != nil {
-			errChan <- err
-			close(errChan)
+			manager.ReportError(err)
 			return
 		}
 
 		if n != sig.Len {
 			// sizes don't match, just return a copy
-			deltaChan <- makeCopyDelta(sig, buf, n, sig.Offset)
+			manager.QueueDelta(makeCopyDelta(sig, buf, n, sig.Offset))
 		} else {
-			h, err := signature.Signature(buf[:n])
+			h, err := Signature(buf[:n])
 
 			if err != nil {
-				errChan <- err
-				close(errChan)
+				manager.ReportError(err)
 				return
 			}
 
 			if !bytes.Equal(h.Sum(nil), sig.Sum.Sum(nil)) {
 				// sizes don't match, just return a dumb_delta
-				deltaChan <- makeCopyDelta(sig, buf, n, sig.Offset)
+				manager.QueueDelta(makeCopyDelta(sig, buf, n, sig.Offset))
 			} else {
-				deltaChan <- makeNoCopyDelta(sig)
+				manager.QueueDelta(makeNoCopyDelta(sig))
 			}
 		}
 
@@ -131,7 +133,7 @@ func Process( req request.Request, signatureChan <-chan signature.Checksum,
 			// We've probably reached the end of the file, so
 			// make a EOFDelta and record the end
 			eofmap[sig.TransferFile.SourcePath] = sig.Offset + int64(n)
-			deltaChan <- makeEOFDelta(sig, sig.Offset + int64(n))
+			manager.QueueDelta(makeEOFDelta(sig, sig.Offset + int64(n)))
 		}
 
 	}
@@ -139,13 +141,17 @@ func Process( req request.Request, signatureChan <-chan signature.Checksum,
 	return
 }
 
-func makeCopyDelta(sig signature.Checksum, buf []byte, length int, offset int64) Delta {
+func makeCopyDelta(sig Checksum, buf []byte, length int, offset int64) Delta {
+
+	// Need to make newbuf because buf will be overwritten soon
+	newbuf := make([]byte, length)
+	copy(newbuf, buf[:length])
 
 	b := Delta{
 		Basis: sig.TransferFile.FileInfo,
 		Path:  sig.TransferFile.DestinationPath,
 		Len: length,
-		Content: buf[:length],
+		Content: newbuf[:length],
 		Offset: offset,
 		NoOp: false,
 	}
@@ -155,7 +161,7 @@ func makeCopyDelta(sig signature.Checksum, buf []byte, length int, offset int64)
 }
 
 
-func makeEOFDelta(sig signature.Checksum, offset int64) Delta {
+func makeEOFDelta(sig Checksum, offset int64) Delta {
 	b := Delta{
 		Basis: sig.TransferFile.FileInfo,
 		Path:  sig.TransferFile.DestinationPath,
@@ -167,7 +173,7 @@ func makeEOFDelta(sig signature.Checksum, offset int64) Delta {
 	return b
 }
 
-func makeNoCopyDelta(sig signature.Checksum) Delta {
+func makeNoCopyDelta(sig Checksum) Delta {
 
 	b := Delta{
 		Basis: sig.TransferFile.FileInfo,

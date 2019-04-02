@@ -1,26 +1,26 @@
-package signature
+package transfer
 
 import (
-	"github.com/colindr/gotests/gosync/request"
 	"hash"
 	"io"
 	"os"
 )
 
 type Checksum struct {
-	TransferFile   request.FileInfo
+	TransferFile   FileInfo
 	SumLen         int
 	Sum            hash.Hash
 	Len            int
 	Offset         int64
 	EOF            bool
+	Done           bool
 }
 
-func Process( fileInfoChan <-chan request.FileInfo, signatureChan chan<- Checksum, errChan chan<- error ) {
+func ProcessSignatures( req *Request, manager Manager) {
 
-	defer close (signatureChan)
+	defer manager.SignatureDone()
 
-	for fileinfo := range fileInfoChan {
+	for fileinfo := range manager.FileInfoChannel() {
 		var err error
 
 		if fileinfo.FileInfo.IsDir() {
@@ -42,27 +42,25 @@ func Process( fileInfoChan <-chan request.FileInfo, signatureChan chan<- Checksu
 				Len: 0,
 				EOF: true,
 			}
-			signatureChan <- c
+			manager.QueueSignature(c)
 			continue
 
 		} else if err != nil {
 			// error statting destination
-			errChan <- err
-			close(errChan)
+			manager.ReportError(err)
 			return
 
 		}
 
 		file, err := os.Open(fileinfo.DestinationPath)
 		if err != nil {
-			errChan <- err
-			close(errChan)
+			manager.ReportError(err)
 			return
 		}
 
 		var offset int64
 		offset = 0
-		buf := make([]byte, 4096)
+		buf := make([]byte, req.BlockSize)
 
 
 		var c Checksum
@@ -78,8 +76,7 @@ func Process( fileInfoChan <-chan request.FileInfo, signatureChan chan<- Checksu
 
 			h, sigerr := Signature(buf[:n])
 			if sigerr != nil {
-				errChan <- sigerr
-				close(errChan)
+				manager.ReportError(sigerr)
 				return
 			}
 
@@ -93,7 +90,7 @@ func Process( fileInfoChan <-chan request.FileInfo, signatureChan chan<- Checksu
 
 			offset += int64(n)
 
-			signatureChan <- c
+			manager.QueueSignature(c)
 
 		}
 
@@ -105,11 +102,10 @@ func Process( fileInfoChan <-chan request.FileInfo, signatureChan chan<- Checksu
 				Offset: offset,
 				EOF: true,
 			}
-			signatureChan <- c
+			manager.QueueSignature(c)
 
 		} else if err != nil {
-			errChan <- err
-			close(errChan)
+			manager.ReportError(err)
 			return
 		}
 

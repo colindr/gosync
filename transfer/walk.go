@@ -1,16 +1,15 @@
-package fileinfo
+package transfer
 
 import (
-	"github.com/colindr/gotests/gosync/request"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
 
-func Walk(root string, destRoot string, fileinfochan chan<- request.FileInfo, errChan chan<- error) {
+func Walk(req *Request, manager Manager) {
 	// close the channel when we're done
-	defer close(fileinfochan)
+	defer manager.FileInfoDone()
 
 	// our walk func just sends os.FileInfo objects to our channel
 	walkFunc := func(path string, info os.FileInfo, err error) error {
@@ -18,25 +17,25 @@ func Walk(root string, destRoot string, fileinfochan chan<- request.FileInfo, er
 			return err
 		}
 		// get source path
-		sourceParts := strings.Split(path, root)
-		destPath := filepath.Join(destRoot, sourceParts[1])
+		sourceParts := strings.Split(path, req.Path)
+		destPath := filepath.Join(req.Destination, sourceParts[1])
 
-		t := request.FileInfo{
+		t := FileInfo{
 			FileInfo: info,
 			SourcePath: path,
 			DestinationPath: destPath,
 		}
 
-		fileinfochan <- t
+		manager.QueueFileInfo(t)
 		return nil
 	}
 
 	// if it was a walk to remember, and errored, return the error
-	if err:= filepath.Walk(root, walkFunc); err != nil {
-		errChan <- err
-		close(errChan)
+	if err:= filepath.Walk(req.Path, walkFunc); err != nil {
+		manager.ReportError(err)
 		return
 	}
+
 	return
 
 }

@@ -7,9 +7,9 @@ import (
 	"github.com/colindr/gotests/gosync/transfer"
 	"github.com/google/uuid"
 	"net"
+	"path/filepath"
 	"strconv"
 	"strings"
-	"github.com/colindr/gotests/gosync/request"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -59,7 +59,7 @@ func Execute() {
 }
 
 
-func NewRequestFromSourceAndDestination(source string, dest string) (*request.Request, error) {
+func NewRequestFromSourceAndDestination(source string, dest string) (*transfer.Request, error) {
 	source_parts := strings.Split(source, ":")
 	dest_parts := strings.Split(dest, ":")
 
@@ -75,21 +75,31 @@ func NewRequestFromSourceAndDestination(source string, dest string) (*request.Re
 		return nil, errors.New(fmt.Sprintf("only one of source or destination can specify a host"))
 	}
 
-	var transferType request.Type
+	var transferType transfer.Type
 	var path string
 	var destination string
 	var port int
 	var host string
+	var err error
 
 	if (len(source_parts) == 1) && (len(dest_parts) == 1) {
-		transferType = request.Local
-		path = source
-		destination = dest
+		transferType = transfer.Local
+		path, err = filepath.Abs(source)
+		if err != nil {
+			return nil, err
+		}
+		destination, err = filepath.Abs(dest)
+		if err != nil {
+			return nil, err
+		}
 		host = ""
 		port = 0
 	} else if len(source_parts) == 1 {
-		transferType = request.Outgoing
-		path = source
+		transferType = transfer.Outgoing
+		path, err = filepath.Abs(source)
+		if err != nil {
+			return nil, err
+		}
 		host = dest_parts[0]
 		if len (dest_parts) == 2{
 			if p, err := strconv.Atoi(dest_parts[1]); err != nil {
@@ -103,8 +113,11 @@ func NewRequestFromSourceAndDestination(source string, dest string) (*request.Re
 			destination = dest_parts[1]
 		}
 	} else {
-		transferType = request.Incoming
-		path = dest
+		transferType = transfer.Incoming
+		path, err = filepath.Abs(dest)
+		if err != nil {
+			return nil, err
+		}
 		host = source_parts[0]
 		if len (source_parts) == 2{
 			if p, err := strconv.Atoi(source_parts[1]); err != nil {
@@ -119,7 +132,7 @@ func NewRequestFromSourceAndDestination(source string, dest string) (*request.Re
 		}
 	}
 
-	return &request.Request{
+	return &transfer.Request{
 		RequestID: uuid.New(),
 
 		Host: host,
@@ -136,9 +149,10 @@ func NewRequestFromSourceAndDestination(source string, dest string) (*request.Re
 
 }
 
-func InitiateSync(req *request.Request) error {
-	if req.Type == request.Local {
-		return transfer.SyncLocal(req)
+func InitiateSync(req *transfer.Request) error {
+	if req.Type == transfer.Local {
+		_, err :=  transfer.SyncLocal(req)
+		return err
 	}
 
 	addr := fmt.Sprintf("%s:%v", req.Host, req.Port)
@@ -156,7 +170,7 @@ func InitiateSync(req *request.Request) error {
 
 	decoder := gob.NewDecoder(conn)
 
-	resp := &request.RequestResponse{}
+	resp := &transfer.RequestResponse{}
 	if err := decoder.Decode(resp); err != nil {
 		return errors.New(fmt.Sprintln("Error encoding transfer request:", err))
 	}

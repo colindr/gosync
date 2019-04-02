@@ -10,3 +10,13 @@ Experiment in golang to sync files.
 ## Stretch Goals
 1. TLS support
 2. Bandwidth Control
+
+## Current TODO
+- [x] Add Statistics Gathering
+- [ ] Handle Symlinks
+- [x] Make Paths Absolute
+- [x] Parameterize SyncLocal Tests
+- [ ] Add Signature Hash
+- [ ] Start net communication implementation
+- [ ] Support Correct File Mode
+- [ ] Add NoOp Signature for same mtime/size

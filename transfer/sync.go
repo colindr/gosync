@@ -3,55 +3,93 @@ package transfer
 import (
 	"errors"
 	"fmt"
-	"github.com/colindr/gotests/gosync/delta"
-	"github.com/colindr/gotests/gosync/fileinfo"
-	"github.com/colindr/gotests/gosync/patch"
-	"github.com/colindr/gotests/gosync/request"
-	"github.com/colindr/gotests/gosync/signature"
 	"net"
+	"time"
 )
 
-func Sync(conn *net.Conn, req *request.Request, resp *request.RequestResponse) error {
-	if req.Type == request.Outgoing {
-		return SyncOutgoing(conn, req, resp)
-	} else if req.Type == request.Incoming {
-		return SyncIncoming(conn, req, resp)
+func Sync(conn *net.Conn, req *Request, resp *RequestResponse) error {
+	if req.Type == Outgoing {
+		_, err := SyncOutgoing(conn, req, resp)
+		return err
+	} else if req.Type == Incoming {
+		_, err := SyncIncoming(conn, req, resp)
+		return err
 	} else {
 		return errors.New(fmt.Sprintln("unknown transfer direction:", req.Type))
 	}
 }
 
-func SyncOutgoing(conn *net.Conn, req *request.Request, resp *request.RequestResponse) error {
-    // we send a goroutine to get file information
-    // from the filesystem, and send that information via filechan
-    return nil
+func SyncOutgoing(conn *net.Conn, req *Request, resp *RequestResponse) (*TransferStats, error) {
+	// Verify request
+	if err := req.Verify(); err != nil {
+		return nil, err
+	}
+
+	manager := MakeOutgoingManager()
+
+	// Outgoing transfer side only does Walk and deltas
+	go Walk(req, manager)
+	go ProcessDeltas(req, manager)
+
+	for {
+		if manager.Error() != nil {
+			return manager.Stats(), manager.Error()
+		} else if manager.Done() {
+			return manager.Stats(), nil
+		}
+		time.Sleep(1)
+	}
+
+
 }
 
-func SyncIncoming(conn *net.Conn, req *request.Request, resp *request.RequestResponse) error {
-	return nil
+func SyncIncoming(conn *net.Conn, req *Request, resp *RequestResponse) (*TransferStats, error) {
+	// Verify request
+	if err := req.Verify(); err != nil {
+		return nil, err
+	}
+
+	manager := MakeIncomingManager()
+
+	// Incoming transfer side only does signatures and patches
+	go ProcessSignatures(req, manager)
+	go ProcessPatches(req, manager)
+
+	for {
+		if manager.Error() != nil {
+			return manager.Stats(), manager.Error()
+		} else if manager.Done() {
+			return manager.Stats(), nil
+		}
+		time.Sleep(1)
+	}
+
 }
 
 // SyncLocal does all filesystem operations locally
-func SyncLocal(req *request.Request) error {
+func SyncLocal(req *Request) (*TransferStats, error) {
 
-	fileinfochan := make(chan request.FileInfo)
-	checksumchan := make(chan signature.Checksum)
-	deltachan := make(chan delta.Delta)
-	errchan := make(chan error)
-	donechan := make(chan bool)
+	// Verify request
+	if err := req.Verify(); err != nil {
+		return nil, err
+	}
+
+	manager := MakeLocalManager()
 
 	// Super simple
-	go fileinfo.Walk(req.Path, req.Destination, fileinfochan, errchan)
-	go signature.Process(fileinfochan, checksumchan, errchan)
-	go delta.Process(*req, checksumchan, deltachan, errchan, false)
-	go patch.Apply(*req, deltachan, donechan, errchan)
+	go Walk(req, manager)
+	go ProcessSignatures(req, manager)
+	go ProcessDeltas(req, manager)
+	go ProcessPatches(req, manager)
 
 
-	select {
-	case err := <-errchan:
-		return err
-	case  <-donechan:
-		return nil
+	for {
+		if manager.Error() != nil {
+			return manager.Stats(), manager.Error()
+		} else if manager.Done() {
+			return manager.Stats(), nil
+		}
+		time.Sleep(1)
 	}
 
 }
