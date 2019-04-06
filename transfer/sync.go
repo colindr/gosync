@@ -25,7 +25,16 @@ func SyncOutgoing(conn *net.Conn, req *Request, resp *RequestResponse) (*Transfe
 		return nil, err
 	}
 
-	manager := MakeOutgoingManager()
+	manager := MakeSourceManager()
+
+	// start tcp loop goroutine
+	// go TCPLoop(req, conn, manager)
+
+	// start udp sender gorouting
+	// go UDPSender(req, manager)
+
+	// start udp receiver goroutine
+	// go UDPReceiver(req, manager)
 
 	// Outgoing transfer side only does Walk and deltas
 	go Walk(req, manager)
@@ -50,6 +59,15 @@ func SyncIncoming(conn *net.Conn, req *Request, resp *RequestResponse) (*Transfe
 	}
 
 	manager := MakeIncomingManager()
+
+	// start tcp loop goroutine
+	// go TCPLoop(req, conn, manager)
+
+	// start udp sender gorouting
+	// go UDPSender(req, manager)
+
+	// start udp receiver goroutine
+	// go UDPReceiver(req, manager)
 
 	// Incoming transfer side only does signatures and patches
 	go ProcessSignatures(req, manager)

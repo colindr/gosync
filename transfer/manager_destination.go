@@ -1,6 +1,6 @@
 package transfer
 
-type OutgoingManager struct {
+type IncomingManager struct {
 	fileInfoChan       chan FileInfo
 	signatureChan      chan Checksum
 	deltaChan          chan Delta
@@ -12,9 +12,9 @@ type OutgoingManager struct {
 }
 
 
-func MakeOutgoingManager() *OutgoingManager {
+func MakeIncomingManager() *IncomingManager {
 
-	return &OutgoingManager{
+	return &IncomingManager{
 		fileInfoChan: make(chan FileInfo, FILE_INFO_BUF_SIZE),
 		signatureChan: make(chan Checksum, SIGNATURE_BUF_SIZE),
 		deltaChan: make(chan Delta, DELTA_BUF_SIZE),
@@ -22,61 +22,61 @@ func MakeOutgoingManager() *OutgoingManager {
 	}
 }
 
-func (manager OutgoingManager) QueueFileInfo (fi FileInfo) {
+func (manager *IncomingManager) QueueFileInfo (fi FileInfo) {
 	manager.stats.RecordFileInfo(fi)
 	manager.fileInfoChan <- fi
 }
 
-func (manager OutgoingManager) FileInfoDone () {
+func (manager *IncomingManager) FileInfoDone () {
 	close(manager.fileInfoChan)
 }
 
-func (manager OutgoingManager) FileInfoChannel() chan FileInfo {
+func (manager *IncomingManager) FileInfoChannel() chan FileInfo {
 	return manager.fileInfoChan
 }
 
-func (manager OutgoingManager) QueueSignature (sig Checksum) {
+func (manager *IncomingManager) QueueSignature (sig Checksum) {
 	manager.stats.RecordSignature(sig)
 	manager.signatureChan <- sig
 }
 
-func (manager OutgoingManager) SignatureDone() {
+func (manager *IncomingManager) SignatureDone() {
 	close(manager.signatureChan)
 }
 
-func (manager OutgoingManager) SignatureChannel() chan Checksum {
+func (manager *IncomingManager) SignatureChannel() chan Checksum {
 	return manager.signatureChan
 }
 
-func (manager OutgoingManager) QueueDelta (delta Delta) {
+func (manager *IncomingManager) QueueDelta (delta Delta) {
 	manager.stats.RecordDelta(delta)
 	manager.deltaChan <- delta
 }
 
-func (manager OutgoingManager) DeltaDone() {
+func (manager *IncomingManager) DeltaDone() {
 	close(manager.deltaChan)
 }
 
-func (manager OutgoingManager) DeltaChannel() chan Delta {
+func (manager *IncomingManager) DeltaChannel() chan Delta {
 	return manager.deltaChan
 }
 
-func (manager OutgoingManager) PatchDone() {
+func (manager *IncomingManager) PatchDone() {
 	manager.done = true
 }
 
-func (manager OutgoingManager) ReportError(err error) {
+func (manager *IncomingManager) ReportError(err error) {
 	manager.err = err
 }
 
-func (manager OutgoingManager) Error() error {
+func (manager *IncomingManager) Error() error {
 	return manager.err
 }
 
-func (manager OutgoingManager) Done() bool {
+func (manager *IncomingManager) Done() bool {
 	return manager.done
 }
 
-func (manager OutgoingManager) Stats() *TransferStats {
+func (manager *IncomingManager) Stats() *TransferStats {
 	return manager.stats
 }

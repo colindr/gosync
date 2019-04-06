@@ -50,3 +50,30 @@ type Manager interface {
 	Stats() *TransferStats
 
 }
+
+// TransferStatus is a struct that represents
+// the status of the network communication for a transfer.
+// It's the only kind of TCP message that is sent between sides.
+type SourceTransferStatus struct {
+	// Last{FileInfo,Delta}Packet is the packet number of the last
+	// {FileInfo,Delta} Packet that will be sent. The
+	// DestinationManager will use these indexes to know when
+	// they've finished receiving packets and can close various
+	// channels.
+	LastFileInfoPacket        int64
+	LastDeltaPacket           int64
+
+	SourcePacketerStatus      PacketerStatus
+
+	Failed                    error
+}
+
+
+type DestinationTranferStatus struct {
+	LastSignaturePacket         int64
+	PatchDone                   bool
+
+	DestinationPacketerStatus   PacketerStatus
+
+	Failed                    error
+}

@@ -17,6 +17,17 @@ Experiment in golang to sync files.
 - [x] Make Paths Absolute
 - [x] Parameterize SyncLocal Tests
 - [ ] Add Signature Hash
-- [ ] Start net communication implementation
-- [ ] Support Correct File Mode
+- [x] Start net communication implementation
+- [ ] Finish v1 of net communication
+  - [x] Diagram design
+  - [ ] Implement Packet Encoding
+  - [x] Implement SourceManager
+  - [ ] Implement DestinationManager
+  - [ ] Implement Packeter SendPackets/ReceivePacket
+  - [ ] Implement Packeter resendPackets/deleteSentPackets/determineResendPackets
+  - [ ] Implement Decoder
+  - [ ] Implement TCP Loop goroutine
+  - [ ] Implement UDP Sender/Receiver goroutines
+- [ ] Test v1 of net communication
+- [ ] Support preserving file mode
 - [ ] Add NoOp Signature for same mtime/size
