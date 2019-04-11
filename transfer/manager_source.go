@@ -1,11 +1,16 @@
 package transfer
 
+import (
+	"bytes"
+	"encoding/gob"
+)
+
 type SourceManager struct {
 	packetChan            chan Packet
 	signatureChan         chan Checksum
 
-	latestFileInfoPacket  int64
-	latestDeltaPacket     int64
+	latestFileInfoPacket  uint64
+	latestDeltaPacket     uint64
 
 	done                  bool
 	err                   error
@@ -31,7 +36,7 @@ func MakeSourceManager() *SourceManager {
 // responsibility to call the packeter's "ReceivePacketerStatusUpdate" function
 // as well, because the packeter may need to resend some packets, or delete
 // some sent packets.
-func (manager *SourceManager) ReceiveStatusUpdate (status DestinationTranferStatus) *SourceTransferStatus{
+func (manager *SourceManager) ReceiveStatusUpdate (status DestinationTransferStatus) *SourceTransferStatus{
 
 	if status.Failed != nil {
 		manager.status.Failed = status.Failed
@@ -59,9 +64,14 @@ func (manager *SourceManager) ReceiveStatusUpdate (status DestinationTranferStat
 func (manager *SourceManager) QueueFileInfo (fi FileInfo) {
 	manager.stats.RecordFileInfo(fi)
 
-	// encoder := ??
-	// packets := MakePackets(encoder.MakeBytes(fi), FileInfoPacketType)
-	packets := make([]Packet, 1)
+	var buff bytes.Buffer
+	encoder := gob.NewEncoder(&buff)
+	if err := encoder.Encode(fi); err != nil {
+		manager.ReportError(err)
+		return
+	}
+
+	packets := MakePackets(&buff, FileInfoPacket)
 	packetNumber, err := manager.packeter.SendPackets(packets)
 	if err != nil {
 		manager.ReportError(err)
@@ -97,9 +107,14 @@ func (manager *SourceManager) SignatureChannel() chan Checksum {
 func (manager *SourceManager) QueueDelta (delta Delta) {
 	manager.stats.RecordDelta(delta)
 
-	// encoder := ??
-	// packets := MakePackets(encoder.MakeBytes(delta), DeltaPacketType)
-	packets := make([]Packet, 1)
+	var buff bytes.Buffer
+	encoder := gob.NewEncoder(&buff)
+	if err := encoder.Encode(delta); err != nil {
+		manager.ReportError(err)
+		return
+	}
+
+	packets := MakePackets(&buff, DeltaPacket)
 	packetNumber, err := manager.packeter.SendPackets(packets)
 	if err != nil {
 		manager.ReportError(err)

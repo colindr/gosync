@@ -20,9 +20,9 @@ Experiment in golang to sync files.
 - [x] Start net communication implementation
 - [ ] Finish v1 of net communication
   - [x] Diagram design
-  - [ ] Implement Packet Encoding
+  - [x] Implement Packet Encoding
   - [x] Implement SourceManager
-  - [ ] Implement DestinationManager
+  - [x] Implement DestinationManager
   - [x] Implement Packeter SendPackets/ReceivePacket
   - [x] Implement Packeter resendPackets/deleteSentPackets/determineResendPackets
   - [ ] Implement Decoder

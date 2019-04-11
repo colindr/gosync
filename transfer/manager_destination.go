@@ -1,82 +1,139 @@
 package transfer
 
-type IncomingManager struct {
-	fileInfoChan       chan FileInfo
-	signatureChan      chan Checksum
-	deltaChan          chan Delta
+import (
+	"bytes"
+	"encoding/gob"
+)
 
-	done               bool
-	err                error
+type DestinationManager struct {
+	packetChan            chan Packet
+	fileInfoChan          chan FileInfo
+	deltaChan             chan Delta
 
-	stats            *TransferStats
+	latestSignaturePacket uint64
+
+	done                  bool
+	err                   error
+
+	packeter              *Packeter
+
+	status                *DestinationTransferStatus
+	stats                 *TransferStats
 }
 
 
-func MakeIncomingManager() *IncomingManager {
+func MakeDestinationManager() *DestinationManager {
 
-	return &IncomingManager{
+	return &DestinationManager{
+		packetChan: make(chan Packet, 100),
 		fileInfoChan: make(chan FileInfo, FILE_INFO_BUF_SIZE),
-		signatureChan: make(chan Checksum, SIGNATURE_BUF_SIZE),
 		deltaChan: make(chan Delta, DELTA_BUF_SIZE),
 		stats: NewTransferStats(),
+		packeter: NewPacketer(),
 	}
 }
 
-func (manager *IncomingManager) QueueFileInfo (fi FileInfo) {
+// ReceiveStatusUpdate is called by the TCPer.  It's the DestinationManager's
+// responsibility to call the packeter's "ReceivePacketerStatusUpdate" function
+// as well, because the packeter may need to resend some packets, or delete
+// some sent packets.
+func (manager *DestinationManager) ReceiveStatusUpdate (status SourceTransferStatus) *DestinationTransferStatus{
+
+	if status.Failed != nil {
+		manager.status.Failed = status.Failed
+		manager.ReportError(status.Failed)
+	}
+
+	// Tell the packeter about it's counterpart's status. The packeter then
+	// return's it's status, which will be sent by the TCPer on it's next iteration.
+	manager.status.DestinationPacketerStatus = manager.packeter.ReceivePacketerStatusUpdate(
+		status.SourcePacketerStatus)
+
+	// All FileInfo packets have been decoded, call FileInfoDone
+	if status.LastFileInfoPacket != 0 && manager.packeter.LastPacketDecoded >= status.LastFileInfoPacket {
+		manager.FileInfoDone()
+	}
+
+	// All delta packets have been decoded, call DeltaDone
+	if status.LastDeltaPacket != 0 && manager.packeter.LastPacketDecoded >= status.LastDeltaPacket {
+		manager.DeltaDone()
+	}
+
+	return manager.status
+}
+
+
+func (manager *DestinationManager) QueueFileInfo (fi FileInfo) {
 	manager.stats.RecordFileInfo(fi)
 	manager.fileInfoChan <- fi
 }
 
-func (manager *IncomingManager) FileInfoDone () {
+func (manager *DestinationManager) FileInfoDone () {
 	close(manager.fileInfoChan)
 }
 
-func (manager *IncomingManager) FileInfoChannel() chan FileInfo {
-	return manager.fileInfoChan
+func (manager *DestinationManager) FileInfoChannel() chan FileInfo {
+	return nil
 }
 
-func (manager *IncomingManager) QueueSignature (sig Checksum) {
+func (manager *DestinationManager) QueueSignature (sig Checksum) {
 	manager.stats.RecordSignature(sig)
-	manager.signatureChan <- sig
+
+	var buff bytes.Buffer
+	encoder := gob.NewEncoder(&buff)
+	if err := encoder.Encode(sig); err != nil {
+		manager.ReportError(err)
+		return
+	}
+
+	packets := MakePackets(&buff, SignaturePacket)
+	packetNumber, err := manager.packeter.SendPackets(packets)
+	if err != nil {
+		manager.ReportError(err)
+		return
+	}
+
+	manager.latestSignaturePacket = packetNumber
 }
 
-func (manager *IncomingManager) SignatureDone() {
-	close(manager.signatureChan)
+func (manager *DestinationManager) SignatureDone() {
+	// record the latestFileInfoPacket as the LastFileInfoPacket
+	manager.status.LastSignaturePacket = manager.latestSignaturePacket
 }
 
-func (manager *IncomingManager) SignatureChannel() chan Checksum {
-	return manager.signatureChan
+func (manager *DestinationManager) SignatureChannel() chan Checksum {
+	return nil
 }
 
-func (manager *IncomingManager) QueueDelta (delta Delta) {
+func (manager *DestinationManager) QueueDelta (delta Delta) {
 	manager.stats.RecordDelta(delta)
 	manager.deltaChan <- delta
 }
 
-func (manager *IncomingManager) DeltaDone() {
+func (manager *DestinationManager) DeltaDone() {
 	close(manager.deltaChan)
 }
 
-func (manager *IncomingManager) DeltaChannel() chan Delta {
+func (manager *DestinationManager) DeltaChannel() chan Delta {
 	return manager.deltaChan
 }
 
-func (manager *IncomingManager) PatchDone() {
-	manager.done = true
+func (manager *DestinationManager) PatchDone() {
+	manager.status.PatchDone = true
 }
 
-func (manager *IncomingManager) ReportError(err error) {
+func (manager *DestinationManager) ReportError(err error) {
 	manager.err = err
 }
 
-func (manager *IncomingManager) Error() error {
+func (manager *DestinationManager) Error() error {
 	return manager.err
 }
 
-func (manager *IncomingManager) Done() bool {
+func (manager *DestinationManager) Done() bool {
 	return manager.done
 }
 
-func (manager *IncomingManager) Stats() *TransferStats {
+func (manager *DestinationManager) Stats() *TransferStats {
 	return manager.stats
 }

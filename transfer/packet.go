@@ -1,5 +1,9 @@
 package transfer
 
+import (
+	"bytes"
+)
+
 type PacketContentType uint8
 
 const PACKET_CHANNEL_SIZE = 100
@@ -14,6 +18,9 @@ type Packet struct {
 	ContentType  PacketContentType
 	Content      []byte
 }
+
+
+const PACKET_CONTENT_LEN = 500
 
 // Packeter manages incoming and outgoing packets
 // It keeps a copy of all packets sent until it's confirmed
@@ -53,6 +60,23 @@ func NewPacketer () *Packeter {
 		LastPacketReceived: 0,
 		LastPacketDecoded: 0,
 	}
+}
+
+func MakePackets(buffer *bytes.Buffer, packetType PacketContentType) []Packet {
+	packets := make([]Packet, buffer.Len()/PACKET_CONTENT_LEN)
+	i := 0
+	for buffer.Len() > PACKET_CONTENT_LEN {
+
+		p := Packet{
+			ContentType: packetType,
+			Content: buffer.Next(PACKET_CONTENT_LEN),
+			IsEndPacket: false,
+		}
+		packets[i] = p
+		i++
+	}
+	packets[i-1].IsEndPacket = true
+	return packets
 }
 
 // SendPackets inserts the supplied packets into the sendCache,

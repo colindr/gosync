@@ -60,8 +60,8 @@ type SourceTransferStatus struct {
 	// DestinationManager will use these indexes to know when
 	// they've finished receiving packets and can close various
 	// channels.
-	LastFileInfoPacket        int64
-	LastDeltaPacket           int64
+	LastFileInfoPacket        uint64
+	LastDeltaPacket           uint64
 
 	SourcePacketerStatus      PacketerStatus
 
@@ -69,11 +69,11 @@ type SourceTransferStatus struct {
 }
 
 
-type DestinationTranferStatus struct {
-	LastSignaturePacket         int64
+type DestinationTransferStatus struct {
+	LastSignaturePacket         uint64
 	PatchDone                   bool
 
 	DestinationPacketerStatus   PacketerStatus
 
-	Failed                    error
+	Failed                      error
 }
