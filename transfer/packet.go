@@ -2,20 +2,15 @@ package transfer
 
 type PacketContentType uint8
 
+const PACKET_CHANNEL_SIZE = 100
+
 const FileInfoPacket PacketContentType = 0
 const SignaturePacket PacketContentType = 1
 const DeltaPacket PacketContentType = 2
 
-type PacketType uint8
-
-const StartPacket  PacketType = 0
-const MiddlePacket PacketType = 1
-const EndPacket    PacketType = 2
-
 type Packet struct {
-	PacketID     uint
-	ContentID    uint
-	Type         PacketType
+	PacketID     uint64
+	IsEndPacket  bool
 	ContentType  PacketContentType
 	Content      []byte
 }
@@ -26,37 +21,52 @@ type Packet struct {
 // It also gathers incoming packets until all content groups
 // are recieved so the can be decoded.
 type Packeter struct {
-	sendCache       map[int64]Packet
-	receiveCache    map[int64]Packet
+	sendCache       map[uint64]Packet
+	receiveCache    map[uint64]Packet
 
 	PacketChannel   chan Packet
 
-	LastPacketSent        int64
-	LastPacketReceived    int64
-	LastPacketDecoded     int64
+	LastDeletedPacket     uint64
+	LastPacketSent        uint64
+	LastPacketReceived    uint64
+	LastPacketDecoded     uint64
 }
 
 // PacketerStatus is part of the status that is sent back and
 // forth by the TCPer. It's source/destination agnostic so the
 // Packeter can be used identically on both sides.
-
 type PacketerStatus struct {
-	LastPacketReceived int64
-	ResendPackets      []int64
-	LastPacketSent     int64
+	LastPacketReceived uint64
+	ResendPackets      []uint64
+	LastPacketSent     uint64
 }
 
 func NewPacketer () *Packeter {
-	return &Packeter{}
+	return &Packeter{
+		sendCache: make(map[uint64]Packet),
+		receiveCache: make(map[uint64]Packet),
+
+		PacketChannel: make(chan Packet, PACKET_CHANNEL_SIZE),
+
+		LastDeletedPacket: 0,
+		LastPacketSent: 0,
+		LastPacketReceived: 0,
+		LastPacketDecoded: 0,
+	}
 }
 
 // SendPackets inserts the supplied packets into the sendCache,
 // adds them to the PacketChannel, increments LastPacketSent and
 // returns the number of the last packet sent
-func (packeter *Packeter) SendPackets(packets []Packet) (int64, error) {
-    // insert into sendCache
+func (packeter *Packeter) SendPackets(packets []Packet) (uint64, error) {
+    // insert into sendCache and add to PacketChannel
+	for _, packet := range packets {
+		packeter.sendCache[packet.PacketID] = packet
+		packeter.PacketChannel <- packet
+	}
 
     // increment packeter.LastPacketSent
+	packeter.LastPacketSent += uint64(len(packets))
 
     return packeter.LastPacketSent, nil
 }
@@ -64,11 +74,19 @@ func (packeter *Packeter) SendPackets(packets []Packet) (int64, error) {
 // ReceivePacket inserts the packet into the receiveCache, which
 // the Decoder goroutine is constantly iterating over and decoding.
 // This function also optionally updates the LastPacketReceived.
-func (packeter *Packeter) ReceievePacket(packet Packet) error {
+func (packeter *Packeter) ReceievePacket(packet Packet) {
 	// insert into receiveCache
+	packeter.receiveCache[packet.PacketID] = packet
 
 	// increment packeter.LastPacketReceived
-	return nil
+	nextLastPackage := packeter.LastPacketReceived + 1
+
+	var ok bool
+	_, ok = packeter.receiveCache[nextLastPackage]
+	for  ;ok ; nextLastPackage++ {
+		packeter.LastPacketReceived = nextLastPackage
+		_, ok = packeter.receiveCache[nextLastPackage]
+	}
 }
 
 // ReceivePacketerStatusUpdate is called by a manger, it informs this
@@ -96,14 +114,38 @@ func (packeter *Packeter) ReceivePacketerStatusUpdate(status PacketerStatus) Pac
 }
 
 
-func (packeter *Packeter) deleteSentPackets(lastReceived int64){
+func (packeter *Packeter) deleteSentPackets(lastReceived uint64){
+
+	// iterate between LastDeletedPacket and lastReceived,
+	// deleting packets
+	for i:=packeter.LastDeletedPacket;i<=lastReceived;i++{
+		delete(packeter.sendCache, i)
+	}
+
+	// record LastDeletedPacket
+	packeter.LastDeletedPacket = lastReceived
 
 }
 
-func (packeter *Packeter) resendPackets(packetNumbers []int64){
-
+func (packeter *Packeter) resendPackets(packetNumbers []uint64){
+	// get packets from the sendCache and add to PacketChannel
+	for _, packetID := range packetNumbers {
+		packeter.PacketChannel <- packeter.sendCache[packetID]
+	}
 }
 
-func (packeter *Packeter) determineResendPackets(lastSent int64) []int64 {
-	return make([]int64, 1)
+func (packeter *Packeter) determineResendPackets(lastSent uint64) []uint64 {
+	var neededPackets []uint64
+	// simple solution is to ask for all packets between
+	// packeter.LastPacketReceived and lastSent that are also not in
+	// the receive cache
+	// TODO: should we wait for packets to arrive before asking for a resend
+	//       in case the status update arrives before the packets?
+	for i:=packeter.LastPacketReceived+1; i <= lastSent; i++{
+		if _, ok := packeter.receiveCache[i]; !ok {
+			neededPackets = append(neededPackets, i)
+		}
+	}
+
+	return neededPackets
 }

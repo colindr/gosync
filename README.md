@@ -23,8 +23,8 @@ Experiment in golang to sync files.
   - [ ] Implement Packet Encoding
   - [x] Implement SourceManager
   - [ ] Implement DestinationManager
-  - [ ] Implement Packeter SendPackets/ReceivePacket
-  - [ ] Implement Packeter resendPackets/deleteSentPackets/determineResendPackets
+  - [x] Implement Packeter SendPackets/ReceivePacket
+  - [x] Implement Packeter resendPackets/deleteSentPackets/determineResendPackets
   - [ ] Implement Decoder
   - [ ] Implement TCP Loop goroutine
   - [ ] Implement UDP Sender/Receiver goroutines
