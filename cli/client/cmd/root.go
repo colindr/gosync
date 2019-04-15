@@ -4,7 +4,7 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
-	"github.com/colindr/gotests/gosync/transfer"
+	"github.com/colindr/gosync/transfer"
 	"github.com/google/uuid"
 	"net"
 	"path/filepath"
@@ -75,7 +75,7 @@ func NewRequestFromSourceAndDestination(source string, dest string) (*transfer.R
 		return nil, errors.New(fmt.Sprintf("only one of source or destination can specify a host"))
 	}
 
-	var transferType transfer.Type
+	var transferType transfer.Direction
 	var path string
 	var destination string
 	var port int
@@ -138,7 +138,7 @@ func NewRequestFromSourceAndDestination(source string, dest string) (*transfer.R
 		Host: host,
 		Port: port,
 
-		Type: transferType,
+		Direction: transferType,
 
 		Path: path,
 		Destination: destination,
@@ -150,10 +150,28 @@ func NewRequestFromSourceAndDestination(source string, dest string) (*transfer.R
 }
 
 func InitiateSync(req *transfer.Request) error {
-	if req.Type == transfer.Local {
-		_, err :=  transfer.SyncLocal(req)
+
+	opts := &transfer.Options{
+		Path: req.Path,
+		Destination: req.Destination,
+
+		FollowLinks: req.FollowLinks,
+		BlockSize: req.BlockSize,
+	}
+
+	if req.Direction == transfer.Local {
+		_, err :=  transfer.SyncLocal(opts)
 		return err
 	}
+
+	var err error
+	req.RequesterHost, err = os.Hostname() // TODO: configurable hostname
+
+	if err !=nil{
+		return err
+	}
+
+	req.RequesterUDPPort = 30000 // TODO: pick a port
 
 	addr := fmt.Sprintf("%s:%v", req.Host, req.Port)
 	fmt.Println("Connecting to", addr)
@@ -179,6 +197,24 @@ func InitiateSync(req *transfer.Request) error {
 		return errors.New(fmt.Sprintln("Transfer request rejected:", resp.Reason))
 	}
 
-	return transfer.Sync(&conn, req, resp)
+	if req.Direction == transfer.Outgoing {
+		opts.SourceHost = req.RequesterHost
+		opts.SourceUDPPort = req.RequesterUDPPort
+
+		opts.DestinationHost = req.Host
+		opts.DestinationUDPPort = resp.UDPPort
+
+		_, err := transfer.SyncOutgoing(conn, opts, resp)
+		return err
+	} else {
+		opts.SourceHost = req.Host
+		opts.SourceUDPPort = resp.UDPPort
+
+		opts.DestinationHost = req.RequesterHost
+		opts.DestinationUDPPort = req.RequesterUDPPort
+		_, err := transfer.SyncIncoming(conn, opts, resp)
+		return err
+	}
+
 
 }

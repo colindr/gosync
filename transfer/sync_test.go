@@ -3,7 +3,6 @@ package transfer
 import (
 	"bytes"
 	"fmt"
-	"github.com/google/uuid"
 	"io/ioutil"
 	"os"
 	"path"
@@ -35,11 +34,7 @@ type SyncTestCase struct {
 
 
 func TestAbsPathVerify(t *testing.T) {
-	req := &Request{
-		RequestID: uuid.New(),
-
-		Type: Local,
-
+	opts := &Options{
 		Path: "a",
 		Destination: "/b",
 
@@ -47,25 +42,25 @@ func TestAbsPathVerify(t *testing.T) {
 		BlockSize: 10,
 	}
 
-	_, err := SyncLocal(req)
+	_, err := SyncLocal(opts)
 
 	if err == nil {
 		t.Error("Should have gotten an absolute path error")
 	}
 
-	req.Path = "/a"
-	req.Destination = "b"
+	opts.Path = "/a"
+	opts.Destination = "b"
 
-	_, err = SyncLocal(req)
+	_, err = SyncLocal(opts)
 
 	if err == nil {
 		t.Error("Should have gotten an absolute path error")
 	}
 
-	req.Path = "a"
-	req.Destination = "b"
+	opts.Path = "a"
+	opts.Destination = "b"
 
-	_, err = SyncLocal(req)
+	_, err = SyncLocal(opts)
 
 	if err == nil {
 		t.Error("Should have gotten an absolute path error")
@@ -213,10 +208,7 @@ func buildAndRunLocalSyncTest(t *testing.T, testcase SyncTestCase) *TransferStat
 	makeFiles(testcase.SourceFiles, source)
 	makeFiles(testcase.DestFiles, destination)
 
-	req := &Request{
-		RequestID: uuid.New(),
-
-		Type: Local,
+	opts := &Options{
 
 		Path: source,
 		Destination: destination,
@@ -225,7 +217,7 @@ func buildAndRunLocalSyncTest(t *testing.T, testcase SyncTestCase) *TransferStat
 		BlockSize: testcase.BlockSize,
 	}
 
-	stats, err := SyncLocal(req)
+	stats, err := SyncLocal(opts)
 
 	if err != nil {
 		t.Error(err)

@@ -16,7 +16,7 @@ type Checksum struct {
 	Done           bool
 }
 
-func ProcessSignatures( req *Request, manager Manager) {
+func ProcessSignatures(opts *Options, manager Manager) {
 
 	defer manager.SignatureDone()
 
@@ -60,7 +60,7 @@ func ProcessSignatures( req *Request, manager Manager) {
 
 		var offset int64
 		offset = 0
-		buf := make([]byte, req.BlockSize)
+		buf := make([]byte, opts.BlockSize)
 
 
 		var c Checksum

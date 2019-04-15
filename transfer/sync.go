@@ -1,44 +1,35 @@
 package transfer
 
 import (
-	"errors"
-	"fmt"
 	"net"
 	"time"
 )
 
-func Sync(conn *net.Conn, req *Request, resp *RequestResponse) error {
-	if req.Type == Outgoing {
-		_, err := SyncOutgoing(conn, req, resp)
-		return err
-	} else if req.Type == Incoming {
-		_, err := SyncIncoming(conn, req, resp)
-		return err
-	} else {
-		return errors.New(fmt.Sprintln("unknown transfer direction:", req.Type))
-	}
-}
 
-func SyncOutgoing(conn *net.Conn, req *Request, resp *RequestResponse) (*TransferStats, error) {
+func SyncOutgoing(conn net.Conn, opts *Options, resp *RequestResponse) (*TransferStats, error) {
 	// Verify request
-	if err := req.Verify(); err != nil {
+	if err := opts.Verify(); err != nil {
 		return nil, err
 	}
 
-	manager := MakeSourceManager()
+	packeter := NewPacketer()
+	manager := NewSourceManager()
 
-	// start tcp loop goroutine
-	// go TCPLoop(req, conn, manager)
+	// packet decoder
+	go DecodePackets(manager, packeter)
+
+	// tcp loop passes transfer status information between source and dest
+	go TCPSourceLoop(conn, opts, packeter, manager)
 
 	// start udp sender gorouting
-	// go UDPSender(req, manager)
+	go UDPSender(opts.DestinationHost, opts.DestinationUDPPort, opts, packeter, manager)
 
 	// start udp receiver goroutine
-	// go UDPReceiver(req, manager)
+	go UDPReceiver(opts.SourceHost, opts.SourceUDPPort, opts, packeter, manager)
 
 	// Outgoing transfer side only does Walk and deltas
-	go Walk(req, manager)
-	go ProcessDeltas(req, manager)
+	go Walk(opts, manager)
+	go ProcessDeltas(opts, manager)
 
 	for {
 		if manager.Error() != nil {
@@ -52,26 +43,30 @@ func SyncOutgoing(conn *net.Conn, req *Request, resp *RequestResponse) (*Transfe
 
 }
 
-func SyncIncoming(conn *net.Conn, req *Request, resp *RequestResponse) (*TransferStats, error) {
+func SyncIncoming(conn net.Conn, opts *Options, resp *RequestResponse) (*TransferStats, error) {
 	// Verify request
-	if err := req.Verify(); err != nil {
+	if err := opts.Verify(); err != nil {
 		return nil, err
 	}
 
-	manager := MakeIncomingManager()
+	packeter := NewPacketer()
+	manager := NewDestinationManager()
 
-	// start tcp loop goroutine
-	// go TCPLoop(req, conn, manager)
+	// packet decoder
+	go DecodePackets(manager, packeter)
+
+	// tcp loop passes transfer status information between source and dest
+	go TCPDestinationLoop(conn, opts, packeter, manager)
 
 	// start udp sender gorouting
-	// go UDPSender(req, manager)
+	go UDPSender(opts.SourceHost, opts.SourceUDPPort, opts, packeter, manager)
 
 	// start udp receiver goroutine
-	// go UDPReceiver(req, manager)
+	go UDPReceiver(opts.DestinationHost, opts.DestinationUDPPort, opts, packeter, manager)
 
 	// Incoming transfer side only does signatures and patches
-	go ProcessSignatures(req, manager)
-	go ProcessPatches(req, manager)
+	go ProcessSignatures(opts, manager)
+	go ProcessPatches(opts, manager)
 
 	for {
 		if manager.Error() != nil {
@@ -85,20 +80,20 @@ func SyncIncoming(conn *net.Conn, req *Request, resp *RequestResponse) (*Transfe
 }
 
 // SyncLocal does all filesystem operations locally
-func SyncLocal(req *Request) (*TransferStats, error) {
+func SyncLocal(opts *Options) (*TransferStats, error) {
 
 	// Verify request
-	if err := req.Verify(); err != nil {
+	if err := opts.Verify(); err != nil {
 		return nil, err
 	}
 
 	manager := MakeLocalManager()
 
 	// Super simple
-	go Walk(req, manager)
-	go ProcessSignatures(req, manager)
-	go ProcessDeltas(req, manager)
-	go ProcessPatches(req, manager)
+	go Walk(opts, manager)
+	go ProcessSignatures(opts, manager)
+	go ProcessDeltas(opts, manager)
+	go ProcessPatches(opts, manager)
 
 
 	for {

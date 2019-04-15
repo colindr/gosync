@@ -25,9 +25,10 @@ Experiment in golang to sync files.
   - [x] Implement DestinationManager
   - [x] Implement Packeter SendPackets/ReceivePacket
   - [x] Implement Packeter resendPackets/deleteSentPackets/determineResendPackets
-  - [ ] Implement Decoder
-  - [ ] Implement TCP Loop goroutine
-  - [ ] Implement UDP Sender/Receiver goroutines
+  - [x] Implement Decoder goroutine
+  - [x] Implement TCP Loop goroutines
+  - [x] Implement UDP Sender/Receiver goroutines
+  - [ ] Figure out how to test net communication
 - [ ] Test v1 of net communication
 - [ ] Support preserving file mode
 - [ ] Add NoOp Signature for same mtime/size

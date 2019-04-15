@@ -9,16 +9,16 @@ import (
 )
 
 // Direction - a Request is either for a pull or a push
-type Type uint8
+type Direction uint8
 
 // Local means requester will read and write data
-const Local Type = 0
+const Local Direction = 0
 
 // Incoming means the requester wants to read data
-const Incoming Type = 1
+const Incoming Direction = 1
 
 // Outgoing means the requester wants to write data
-const Outgoing Type = 2
+const Outgoing Direction = 2
 
 // default block length
 const DefaultBlockLength int = 2048
@@ -27,16 +27,39 @@ const DefaultBlockLength int = 2048
 type Request struct {
 	RequestID   uuid.UUID
 
+	RequesterHost        string
+	RequesterUDPPort     int
+
 	Host        string
 	Port        int
 
-	Type        Type
+	Direction   Direction
 
 	Path        string
 	Destination string
 
 	FollowLinks bool
 	BlockSize   int
+}
+
+// Once a transfer is requested and responded to, the relevant
+// information is copied into Options.  This options contains the
+// request options like Path, Destination, FollowLinks, and BlockSize,
+// as well as host/port options.  There is no direction on the Options
+// object since it's the same object at the source and destination.
+type Options struct {
+	Path               string
+	Destination        string
+
+	FollowLinks        bool
+	BlockSize          int
+
+	SourceHost         string
+	SourceUDPPort      int
+
+	DestinationHost    string
+	DestinationUDPPort int
+
 }
 
 
@@ -57,16 +80,16 @@ type RequestResponse struct {
 // Verify will return an error if there's anything
 // wrong with the request.  Currently only checks that
 // Path and Destination are absolute.
-func (req Request) Verify() error {
+func (opts Options) Verify() error {
 
-	if ! path.IsAbs(req.Path){
+	if ! path.IsAbs(opts.Path){
 		return errors.New(fmt.Sprintf(
-			"Path attribute is not an absolute path: %v", req.Path))
+			"Path attribute is not an absolute path: %v", opts.Path))
 	}
 
-	if ! path.IsAbs(req.Destination){
+	if ! path.IsAbs(opts.Destination){
 		return errors.New(fmt.Sprintf(
-			"Destination attribute is not an absolute path: %v", req.Destination))
+			"Destination attribute is not an absolute path: %v", opts.Destination))
 	}
 
 	return nil

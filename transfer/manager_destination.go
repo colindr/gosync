@@ -22,7 +22,7 @@ type DestinationManager struct {
 }
 
 
-func MakeDestinationManager() *DestinationManager {
+func NewDestinationManager() *DestinationManager {
 
 	return &DestinationManager{
 		packetChan: make(chan Packet, 100),
@@ -37,7 +37,7 @@ func MakeDestinationManager() *DestinationManager {
 // responsibility to call the packeter's "ReceivePacketerStatusUpdate" function
 // as well, because the packeter may need to resend some packets, or delete
 // some sent packets.
-func (manager *DestinationManager) ReceiveStatusUpdate (status SourceTransferStatus) *DestinationTransferStatus{
+func (manager *DestinationManager) ReceiveStatusUpdate (status *SourceTransferStatus) *DestinationTransferStatus{
 
 	if status.Failed != nil {
 		manager.status.Failed = status.Failed

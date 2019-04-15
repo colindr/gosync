@@ -5,7 +5,7 @@ import (
 	"os"
 )
 
-func ProcessPatches( req *Request, manager Manager) {
+func ProcessPatches(opts *Options, manager Manager) {
 	defer manager.PatchDone()
 
 	fdmap := make(map[string]*os.File)

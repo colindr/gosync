@@ -20,7 +20,7 @@ type Delta struct {
 }
 
 
-func ProcessDeltas( req *Request, manager Manager)  {
+func ProcessDeltas(opts *Options, manager Manager)  {
 
 	defer manager.DeltaDone()
 
@@ -28,7 +28,7 @@ func ProcessDeltas( req *Request, manager Manager)  {
 
 	eofmap := make(map[string]int64)
 
-	buf := make([]byte, req.BlockSize)
+	buf := make([]byte, opts.BlockSize)
 
 	for sig := range manager.SignatureChannel() {
 		var f *os.File

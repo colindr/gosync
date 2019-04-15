@@ -7,7 +7,7 @@ import (
 )
 
 
-func Walk(req *Request, manager Manager) {
+func Walk(opts *Options, manager Manager) {
 	// close the channel when we're done
 	defer manager.FileInfoDone()
 
@@ -17,8 +17,8 @@ func Walk(req *Request, manager Manager) {
 			return err
 		}
 		// get source path
-		sourceParts := strings.Split(path, req.Path)
-		destPath := filepath.Join(req.Destination, sourceParts[1])
+		sourceParts := strings.Split(path, opts.Path)
+		destPath := filepath.Join(opts.Destination, sourceParts[1])
 
 		t := FileInfo{
 			FileInfo: info,
@@ -31,7 +31,7 @@ func Walk(req *Request, manager Manager) {
 	}
 
 	// if it was a walk to remember, and errored, return the error
-	if err:= filepath.Walk(req.Path, walkFunc); err != nil {
+	if err:= filepath.Walk(opts.Path, walkFunc); err != nil {
 		manager.ReportError(err)
 		return
 	}

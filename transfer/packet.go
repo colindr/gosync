@@ -173,3 +173,7 @@ func (packeter *Packeter) determineResendPackets(lastSent uint64) []uint64 {
 
 	return neededPackets
 }
+
+func (packeter *Packeter) Close() {
+	close(packeter.PacketChannel)
+}

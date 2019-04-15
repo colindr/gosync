@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/colindr/gotests/gosync/cli/client/cmd"
+	"github.com/colindr/gosync/cli/client/cmd"
 )
 
 func main() {
