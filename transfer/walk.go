@@ -4,7 +4,17 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
+
+type FileInfo struct {
+	Mode            os.FileMode
+	Size            int64
+	// uid/gid
+	ModTime         time.Time
+	SourcePath      string
+	DestinationPath string
+}
 
 
 func Walk(opts *Options, manager Manager) {
@@ -21,9 +31,11 @@ func Walk(opts *Options, manager Manager) {
 		destPath := filepath.Join(opts.Destination, sourceParts[1])
 
 		t := FileInfo{
-			FileInfo: info,
+			Mode: info.Mode(),
+			Size: info.Size(),
 			SourcePath: path,
 			DestinationPath: destPath,
+			ModTime: info.ModTime(),
 		}
 
 		manager.QueueFileInfo(t)

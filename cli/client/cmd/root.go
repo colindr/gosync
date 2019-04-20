@@ -204,7 +204,7 @@ func InitiateSync(req *transfer.Request) error {
 		opts.DestinationHost = req.Host
 		opts.DestinationUDPPort = resp.UDPPort
 
-		_, err := transfer.SyncOutgoing(conn, opts, resp)
+		_, err := transfer.SyncOutgoing(conn, opts)
 		return err
 	} else {
 		opts.SourceHost = req.Host
@@ -212,7 +212,7 @@ func InitiateSync(req *transfer.Request) error {
 
 		opts.DestinationHost = req.RequesterHost
 		opts.DestinationUDPPort = req.RequesterUDPPort
-		_, err := transfer.SyncIncoming(conn, opts, resp)
+		_, err := transfer.SyncIncoming(conn, opts)
 		return err
 	}
 

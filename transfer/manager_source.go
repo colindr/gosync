@@ -3,11 +3,16 @@ package transfer
 import (
 	"bytes"
 	"encoding/gob"
+	"errors"
+	"fmt"
+	"runtime/debug"
 )
 
 type SourceManager struct {
 	packetChan            chan Packet
 	signatureChan         chan Checksum
+
+	signatureClosed       bool
 
 	latestFileInfoPacket  uint64
 	latestDeltaPacket     uint64
@@ -28,6 +33,7 @@ func NewSourceManager() *SourceManager {
 		packetChan: make(chan Packet, 100),
 		signatureChan: make(chan Checksum, SIGNATURE_BUF_SIZE),
 		stats: NewTransferStats(),
+		status: &SourceTransferStatus{},
 		packeter: NewPacketer(),
 	}
 }
@@ -38,9 +44,9 @@ func NewSourceManager() *SourceManager {
 // some sent packets.
 func (manager *SourceManager) ReceiveStatusUpdate (status *DestinationTransferStatus) *SourceTransferStatus{
 
-	if status.Failed != nil {
+	if status.Failed != "" {
 		manager.status.Failed = status.Failed
-		manager.ReportError(status.Failed)
+		manager.err = errors.New(status.Failed)
 	}
 
 	// Tell the packeter about it's counterpart's status. The packeter then
@@ -49,7 +55,9 @@ func (manager *SourceManager) ReceiveStatusUpdate (status *DestinationTransferSt
 		status.DestinationPacketerStatus)
 
 	// All signature packets have been decoded, call SignatureDone
-	if status.LastSignaturePacket != 0 && manager.packeter.LastPacketDecoded >= status.LastSignaturePacket {
+	if status.LastSignaturePacket != 0 &&
+		manager.packeter.LastPacketDecoded >= status.LastSignaturePacket &&
+		!manager.signatureClosed{
 		manager.SignatureDone()
 	}
 
@@ -97,6 +105,7 @@ func (manager *SourceManager) QueueSignature (sig Checksum) {
 }
 
 func (manager *SourceManager) SignatureDone() {
+	manager.signatureClosed = true
 	close(manager.signatureChan)
 }
 
@@ -137,8 +146,15 @@ func (manager *SourceManager) PatchDone() {
 	manager.done = true
 }
 
+func (manager *SourceManager) Packeter() *Packeter {
+	return manager.packeter
+}
+
 func (manager *SourceManager) ReportError(err error) {
-	manager.err = err
+	stack := debug.Stack()
+	manager.err = fmt.Errorf("%s: %s", stack, err)
+	manager.status.Failed = fmt.Sprintf("%s: %s", stack, err)
+
 }
 
 func (manager *SourceManager) Error() error {

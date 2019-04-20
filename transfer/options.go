@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
-	"os"
 	"path"
 )
 
@@ -62,12 +61,6 @@ type Options struct {
 
 }
 
-
-type FileInfo struct {
-	FileInfo        os.FileInfo
-	SourcePath      string
-	DestinationPath string
-}
 
 // RequestResponse - response to a TransferRequest
 type RequestResponse struct {

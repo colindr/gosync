@@ -3,12 +3,18 @@ package transfer
 import (
 	"bytes"
 	"encoding/gob"
+	"errors"
+	"fmt"
+	"runtime/debug"
 )
 
 type DestinationManager struct {
 	packetChan            chan Packet
 	fileInfoChan          chan FileInfo
 	deltaChan             chan Delta
+
+	fileInfoClosed        bool
+	deltaClosed           bool
 
 	latestSignaturePacket uint64
 
@@ -28,6 +34,7 @@ func NewDestinationManager() *DestinationManager {
 		packetChan: make(chan Packet, 100),
 		fileInfoChan: make(chan FileInfo, FILE_INFO_BUF_SIZE),
 		deltaChan: make(chan Delta, DELTA_BUF_SIZE),
+		status: &DestinationTransferStatus{},
 		stats: NewTransferStats(),
 		packeter: NewPacketer(),
 	}
@@ -39,9 +46,9 @@ func NewDestinationManager() *DestinationManager {
 // some sent packets.
 func (manager *DestinationManager) ReceiveStatusUpdate (status *SourceTransferStatus) *DestinationTransferStatus{
 
-	if status.Failed != nil {
+	if status.Failed != "" {
 		manager.status.Failed = status.Failed
-		manager.ReportError(status.Failed)
+		manager.err = errors.New(status.Failed)
 	}
 
 	// Tell the packeter about it's counterpart's status. The packeter then
@@ -50,12 +57,16 @@ func (manager *DestinationManager) ReceiveStatusUpdate (status *SourceTransferSt
 		status.SourcePacketerStatus)
 
 	// All FileInfo packets have been decoded, call FileInfoDone
-	if status.LastFileInfoPacket != 0 && manager.packeter.LastPacketDecoded >= status.LastFileInfoPacket {
+	if status.LastFileInfoPacket != 0 &&
+		manager.packeter.LastPacketDecoded >= status.LastFileInfoPacket &&
+		!manager.fileInfoClosed {
 		manager.FileInfoDone()
 	}
 
 	// All delta packets have been decoded, call DeltaDone
-	if status.LastDeltaPacket != 0 && manager.packeter.LastPacketDecoded >= status.LastDeltaPacket {
+	if status.LastDeltaPacket != 0 &&
+		manager.packeter.LastPacketDecoded >= status.LastDeltaPacket &&
+		!manager.deltaClosed{
 		manager.DeltaDone()
 	}
 
@@ -69,11 +80,12 @@ func (manager *DestinationManager) QueueFileInfo (fi FileInfo) {
 }
 
 func (manager *DestinationManager) FileInfoDone () {
+	manager.fileInfoClosed = true
 	close(manager.fileInfoChan)
 }
 
 func (manager *DestinationManager) FileInfoChannel() chan FileInfo {
-	return nil
+	return manager.fileInfoChan
 }
 
 func (manager *DestinationManager) QueueSignature (sig Checksum) {
@@ -111,6 +123,7 @@ func (manager *DestinationManager) QueueDelta (delta Delta) {
 }
 
 func (manager *DestinationManager) DeltaDone() {
+	manager.deltaClosed = true
 	close(manager.deltaChan)
 }
 
@@ -122,8 +135,14 @@ func (manager *DestinationManager) PatchDone() {
 	manager.status.PatchDone = true
 }
 
+func (manager *DestinationManager) Packeter() *Packeter {
+	return manager.packeter
+}
+
 func (manager *DestinationManager) ReportError(err error) {
-	manager.err = err
+	stack := debug.Stack()
+	manager.err = fmt.Errorf("%s: %s", stack, err)
+	manager.status.Failed = fmt.Sprintf("%s: %s", stack, err)
 }
 
 func (manager *DestinationManager) Error() error {

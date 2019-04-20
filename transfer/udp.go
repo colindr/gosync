@@ -8,17 +8,18 @@ import (
 	"net"
 )
 
-func UDPSender(host string, port int, opts *Options, packeter *Packeter, manager Manager){
+func UDPSender(host string, port int, opts *Options, manager Manager){
+
+	gob.Register(&Packet{})
 
 	// make udp conn
-	var laddr,raddr *net.UDPAddr
-	laddr = nil
+	var raddr *net.UDPAddr
 	raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%v:%d", host, port))
 	if err != nil {
 		manager.ReportError(err)
 		return
 	}
-	conn, err := net.DialUDP("udp", laddr, raddr)
+	conn, err := net.ListenPacket("udp", ":0")
 	if err != nil {
 		manager.ReportError(err)
 		return
@@ -27,9 +28,10 @@ func UDPSender(host string, port int, opts *Options, packeter *Packeter, manager
 	// close it at the end of this func
 	defer conn.Close()
 
-	encoder := gob.NewEncoder(conn)
+	var buf bytes.Buffer
+	encoder := gob.NewEncoder(&buf)
 
-	for packet := range packeter.PacketChannel {
+	for packet := range manager.Packeter().PacketChannel {
 
 		if manager.Done() || manager.Error()!= nil{
 			break
@@ -39,12 +41,39 @@ func UDPSender(host string, port int, opts *Options, packeter *Packeter, manager
 			manager.ReportError(err)
 			return
 		}
-	}
 
+		var n int
+		if n, err = conn.WriteTo(buf.Bytes(), raddr); err != nil {
+			manager.ReportError(err)
+			return
+		}
+
+		if n != buf.Len() {
+			manager.ReportError(fmt.Errorf("didn't send full packet"))
+		}
+
+		buf.Reset()
+	}
 }
 
 
-func UDPReceiver(host string, port int, opts *Options, packeter *Packeter, manager Manager){
+func verifyEncodeDecode(packet Packet) {
+
+	var buf bytes.Buffer
+	encoder := gob.NewEncoder(&buf)
+	if err := encoder.Encode(packet); err!= nil{
+		panic(err)
+	}
+
+	newp := &Packet{}
+	decoder := gob.NewDecoder(&buf)
+	if err := decoder.Decode(newp); err!= nil{
+		panic(err)
+	}
+}
+
+
+func UDPReceiver(host string, port int, opts *Options, manager Manager){
 	// listen to incoming udp packets
 	conn, err := net.ListenPacket("udp", fmt.Sprintf("%v:%d", host, port))
 	if err != nil {
@@ -52,25 +81,38 @@ func UDPReceiver(host string, port int, opts *Options, packeter *Packeter, manag
 	}
 	defer conn.Close()
 
-	var packet Packet
-	bytearray := make([]byte, 4096)
-	buff := bytes.NewBuffer(bytearray)
+	gob.Register(&Packet{})
 
-	decoder := gob.NewDecoder(buff)
+	var reader bytes.Buffer
+	decoder := gob.NewDecoder(&reader)
 
 	for (!manager.Done() && manager.Error()==nil){
 
-		if _, _, err := conn.ReadFrom(bytearray); err != nil {
+		var n int
+		buf := make([]byte, 4096)
+		if n, _, err = conn.ReadFrom(buf); err != nil {
 			manager.ReportError(err)
 			return
 		}
+
+		if n == 0 {
+			manager.ReportError(fmt.Errorf("Bad"))
+		}
+
+		if n, err = reader.Write(buf[:n]); err != nil{
+			manager.ReportError(err)
+			return
+		}
+
+
+		packet := &Packet{}
 
 		if err := decoder.Decode(packet); err != nil {
 			manager.ReportError(err)
 			return
 		}
 
-		packeter.ReceievePacket(packet)
+		manager.Packeter().ReceievePacket(*packet)
 	}
 
 

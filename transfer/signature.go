@@ -23,9 +23,9 @@ func ProcessSignatures(opts *Options, manager Manager) {
 	for fileinfo := range manager.FileInfoChannel() {
 		var err error
 
-		if fileinfo.FileInfo.IsDir() {
+		if fileinfo.Mode.IsDir() {
 			// It's a directory, we just create the directory and continue
-			os.Mkdir(fileinfo.DestinationPath, fileinfo.FileInfo.Mode())
+			os.Mkdir(fileinfo.DestinationPath, fileinfo.Mode)
 
 			//TODO: chown and chmod if possible
 

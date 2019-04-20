@@ -9,7 +9,6 @@ import (
 // Delta can be applied to the basis file to produce the desired
 // result file
 type Delta struct {
-	Basis   os.FileInfo
 	Path    string
 	Len     int
 	Content []byte
@@ -148,7 +147,6 @@ func makeCopyDelta(sig Checksum, buf []byte, length int, offset int64) Delta {
 	copy(newbuf, buf[:length])
 
 	b := Delta{
-		Basis: sig.TransferFile.FileInfo,
 		Path:  sig.TransferFile.DestinationPath,
 		Len: length,
 		Content: newbuf[:length],
@@ -163,7 +161,6 @@ func makeCopyDelta(sig Checksum, buf []byte, length int, offset int64) Delta {
 
 func makeEOFDelta(sig Checksum, offset int64) Delta {
 	b := Delta{
-		Basis: sig.TransferFile.FileInfo,
 		Path:  sig.TransferFile.DestinationPath,
 		Len: 0,
 		Offset: offset,
@@ -176,7 +173,6 @@ func makeEOFDelta(sig Checksum, offset int64) Delta {
 func makeNoCopyDelta(sig Checksum) Delta {
 
 	b := Delta{
-		Basis: sig.TransferFile.FileInfo,
 		Path:  sig.TransferFile.DestinationPath,
 		Len: sig.Len,
 		Offset: sig.Offset,

@@ -5,20 +5,20 @@ import (
 	"encoding/gob"
 )
 
-func DecodePackets(manager Manager, packeter *Packeter){
+func DecodePackets(manager Manager){
 	// loop until we're done or an error is reported
-	for (manager.Done() || manager.Error()!=nil) {
+	for (!manager.Done() && manager.Error()==nil) {
 
 		// iterate from LastPacketDecoded to LastPacketReceived
 		// if we get consecutive packets up to an end packet then
 		// we put all the content into a buffer and decode it
-		start := packeter.LastPacketDecoded + 1
+		start := manager.Packeter().LastPacketDecoded + 1
 		i := start
-		end := packeter.LastPacketReceived
+		end := manager.Packeter().LastPacketReceived
 
-		for i<end {
+		for i<=end {
 
-			packet, ok := packeter.receiveCache[i]
+			packet, ok := manager.Packeter().receiveCache[i]
 			if !ok{
 				// There's a hole in our receiveCache dear 'liza,
 				// break and try again later
@@ -27,7 +27,7 @@ func DecodePackets(manager Manager, packeter *Packeter){
 			} else if packet.IsEndPacket {
 				// We've found a consecutive set of packets!
 				// ReadDecodeAndSend them
-				err := readDecodeAndSend(manager, packeter, start, i)
+				err := readDecodeAndSend(manager, start, i)
 				if err!= nil{
 					manager.ReportError(err)
 				}
@@ -41,25 +41,24 @@ func DecodePackets(manager Manager, packeter *Packeter){
 	}
 }
 
-func readDecodeAndSend(manager Manager, packeter *Packeter, start uint64, end uint64) error{
+func readDecodeAndSend(manager Manager, start uint64, end uint64) error{
 	var buff bytes.Buffer
 
+	var contentType PacketContentType
 	// read the content from our packet range in the buffer
 	// for decoding
 	for i:=start; i<=end; i++ {
-		if _, err:=buff.Read(packeter.receiveCache[i].Content); err!=nil{
+		if _, err:=buff.Write(manager.Packeter().receiveCache[i].Content); err!=nil{
 			return err
 		}
+		contentType = manager.Packeter().receiveCache[i].ContentType
 		// remove from the receiveCache
-		delete(packeter.receiveCache, i)
+		delete(manager.Packeter().receiveCache, i)
 	}
-
-	// update the LastPacketDecoded
-	packeter.LastPacketDecoded = end
 
 	decoder := gob.NewDecoder(&buff)
 
-	switch packeter.receiveCache[start].ContentType {
+	switch contentType {
 
 	case FileInfoPacket:
 		var fi FileInfo
@@ -80,5 +79,9 @@ func readDecodeAndSend(manager Manager, packeter *Packeter, start uint64, end ui
 		}
 		manager.QueueDelta(delta)
 	}
+
+	// update the LastPacketDecoded
+	manager.Packeter().LastPacketDecoded = end
+
 	return nil
 }

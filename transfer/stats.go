@@ -2,7 +2,6 @@ package transfer
 
 import (
 	"os"
-	"syscall"
 )
 
 type TransferStats struct{
@@ -30,18 +29,16 @@ func NewTransferStats() *TransferStats {
 
 func (s *TransferStats) RecordFileInfo(fi FileInfo) {
 	// count files, directories, symlinks
-	if fi.FileInfo.IsDir() {
+	if fi.Mode.IsDir() {
 		s.Directories += 1
-	} else if fi.FileInfo.Mode()&os.ModeSymlink == os.ModeSymlink {
+	} else if fi.Mode&os.ModeSymlink == os.ModeSymlink {
 		s.Symlinks += 1
 	} else {
 		s.Files += 1
 	}
 
 	// add size to source
-	if stat, ok := fi.FileInfo.Sys().(*syscall.Stat_t);ok {
-		s.SourceSize += stat.Size
-	}
+	s.SourceSize += fi.Size
 }
 
 func (s *TransferStats) RecordSignature(sig Checksum) {

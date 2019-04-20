@@ -69,6 +69,10 @@ func (manager *LocalManager) PatchDone() {
 	manager.done = true
 }
 
+func (manager *LocalManager) Packeter() *Packeter{
+	return nil
+}
+
 func (manager *LocalManager) ReportError(err error) {
 	manager.err = err
 }

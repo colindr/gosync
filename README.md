@@ -18,7 +18,7 @@ Experiment in golang to sync files.
 - [x] Parameterize SyncLocal Tests
 - [ ] Add Signature Hash
 - [x] Start net communication implementation
-- [ ] Finish v1 of net communication
+- [x] Finish v1 of net communication
   - [x] Diagram design
   - [x] Implement Packet Encoding
   - [x] Implement SourceManager
@@ -28,7 +28,8 @@ Experiment in golang to sync files.
   - [x] Implement Decoder goroutine
   - [x] Implement TCP Loop goroutines
   - [x] Implement UDP Sender/Receiver goroutines
-  - [ ] Figure out how to test net communication
-- [ ] Test v1 of net communication
+  - [x] Figure out how to test net communication
+- [x] Test v1 of net communication
+- [ ] Fix net communication bugs
 - [ ] Support preserving file mode
 - [ ] Add NoOp Signature for same mtime/size

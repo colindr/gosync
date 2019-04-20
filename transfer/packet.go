@@ -28,10 +28,10 @@ const PACKET_CONTENT_LEN = 500
 // It also gathers incoming packets until all content groups
 // are recieved so the can be decoded.
 type Packeter struct {
-	sendCache       map[uint64]Packet
-	receiveCache    map[uint64]Packet
+	sendCache             map[uint64]Packet
+	receiveCache          map[uint64]Packet
 
-	PacketChannel   chan Packet
+	PacketChannel         chan Packet
 
 	LastDeletedPacket     uint64
 	LastPacketSent        uint64
@@ -63,7 +63,7 @@ func NewPacketer () *Packeter {
 }
 
 func MakePackets(buffer *bytes.Buffer, packetType PacketContentType) []Packet {
-	packets := make([]Packet, buffer.Len()/PACKET_CONTENT_LEN)
+	packets := make([]Packet, (buffer.Len()/PACKET_CONTENT_LEN) +1)
 	i := 0
 	for buffer.Len() > PACKET_CONTENT_LEN {
 
@@ -75,7 +75,15 @@ func MakePackets(buffer *bytes.Buffer, packetType PacketContentType) []Packet {
 		packets[i] = p
 		i++
 	}
-	packets[i-1].IsEndPacket = true
+
+	// make last packet
+	p := Packet{
+		ContentType: packetType,
+		Content: buffer.Next(PACKET_CONTENT_LEN),
+		IsEndPacket: true,
+	}
+	packets[i] = p
+
 	return packets
 }
 
@@ -84,13 +92,17 @@ func MakePackets(buffer *bytes.Buffer, packetType PacketContentType) []Packet {
 // returns the number of the last packet sent
 func (packeter *Packeter) SendPackets(packets []Packet) (uint64, error) {
     // insert into sendCache and add to PacketChannel
+    packet_id := packeter.LastPacketSent
 	for _, packet := range packets {
+		packet_id += 1
+		packet.PacketID = packet_id
 		packeter.sendCache[packet.PacketID] = packet
 		packeter.PacketChannel <- packet
+
 	}
 
     // increment packeter.LastPacketSent
-	packeter.LastPacketSent += uint64(len(packets))
+	packeter.LastPacketSent = packet_id
 
     return packeter.LastPacketSent, nil
 }
@@ -107,8 +119,9 @@ func (packeter *Packeter) ReceievePacket(packet Packet) {
 
 	var ok bool
 	_, ok = packeter.receiveCache[nextLastPackage]
-	for  ;ok ; nextLastPackage++ {
+	for ok {
 		packeter.LastPacketReceived = nextLastPackage
+		nextLastPackage++
 		_, ok = packeter.receiveCache[nextLastPackage]
 	}
 }
@@ -165,11 +178,11 @@ func (packeter *Packeter) determineResendPackets(lastSent uint64) []uint64 {
 	// the receive cache
 	// TODO: should we wait for packets to arrive before asking for a resend
 	//       in case the status update arrives before the packets?
-	for i:=packeter.LastPacketReceived+1; i <= lastSent; i++{
-		if _, ok := packeter.receiveCache[i]; !ok {
-			neededPackets = append(neededPackets, i)
-		}
-	}
+	//for i:=packeter.LastPacketReceived+1; i <= lastSent; i++{
+	//	if _, ok := packeter.receiveCache[i]; !ok {
+	//		neededPackets = append(neededPackets, i)
+	//	}
+	//}
 
 	return neededPackets
 }

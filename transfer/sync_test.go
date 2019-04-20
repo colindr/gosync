@@ -4,22 +4,22 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"os"
 	"path"
 	"strings"
 	"testing"
 )
 
-
 type SyncTestCaseFilePiece struct {
-	Character     rune
-	Num           int
+	Character rune
+	Num       int
 }
 
 type SyncTestCaseFile struct {
-	RelPath       string
-	Mode          os.FileMode
-	Pieces        []SyncTestCaseFilePiece
+	RelPath string
+	Mode    os.FileMode
+	Pieces  []SyncTestCaseFilePiece
 }
 
 type SyncTestCase struct {
@@ -32,14 +32,72 @@ type SyncTestCase struct {
 	Directories int64
 }
 
+var testcase1 = SyncTestCase{
+	SourceFiles: []SyncTestCaseFile{
+		{
+			RelPath: "a",
+			Pieces: []SyncTestCaseFilePiece{
+				{
+					Character: 'a',
+					Num:       10,
+				},
+			},
+		},
+		{
+			RelPath: "b",
+			Pieces: []SyncTestCaseFilePiece{
+				{
+					Character: 'b',
+					Num:       20,
+				},
+			},
+		},
+	},
+	DestFiles:   []SyncTestCaseFile{},
+	BlockSize:   10,
+	BytesSent:   30,
+	BytesSame:   0,
+	Directories: 1,
+	Files:       2,
+}
+
+var testcase2 = SyncTestCase{
+	SourceFiles: []SyncTestCaseFile{
+		{
+			RelPath: "a",
+			Pieces: []SyncTestCaseFilePiece{
+				{
+					Character: 'a',
+					Num:       20,
+				},
+			},
+		},
+	},
+	DestFiles: []SyncTestCaseFile{
+		{
+			RelPath: "a",
+			Pieces: []SyncTestCaseFilePiece{
+				{
+					Character: 'a',
+					Num:       10,
+				},
+			},
+		},
+	},
+	BlockSize:   10,
+	BytesSent:   10,
+	BytesSame:   10,
+	Directories: 1,
+	Files:       1,
+}
 
 func TestAbsPathVerify(t *testing.T) {
 	opts := &Options{
-		Path: "a",
+		Path:        "a",
 		Destination: "/b",
 
 		FollowLinks: false,
-		BlockSize: 10,
+		BlockSize:   10,
 	}
 
 	_, err := SyncLocal(opts)
@@ -69,85 +127,27 @@ func TestAbsPathVerify(t *testing.T) {
 
 func TestSimpleSyncLocal(t *testing.T) {
 
-	testcase := SyncTestCase{
-		SourceFiles: []SyncTestCaseFile{
-			{
-				RelPath: "a",
-				Pieces: []SyncTestCaseFilePiece{
-					{
-						Character: 'a',
-						Num:       10,
-					},
-				},
-			},
-			{
-				RelPath: "b",
-				Pieces: []SyncTestCaseFilePiece{
-					{
-						Character: 'b',
-						Num:       20,
-					},
-				},
-			},
-		},
-		DestFiles: []SyncTestCaseFile{},
-		BlockSize: 10,
-		BytesSent: 30,
-		BytesSame: 0,
-		Directories: 1,
-		Files: 2,
-	}
-
-	buildAndRunLocalSyncTest(t, testcase)
-
+	buildAndRunLocalSyncTest(t, testcase1)
 
 	// run the same test with a block size larger than the file size
-	testcase.BlockSize = 4096
-	buildAndRunLocalSyncTest(t, testcase)
+	testcase1.BlockSize = 4096
+	buildAndRunLocalSyncTest(t, testcase1)
+}
 
+func TestSimpleNetSync(t *testing.T) {
+	buildAndRunNetSyncTest(t, testcase1)
 }
 
 func TestChecksumSyncLocal(t *testing.T) {
 
-	testcase := SyncTestCase{
-		SourceFiles: []SyncTestCaseFile{
-			{
-				RelPath: "a",
-				Pieces: []SyncTestCaseFilePiece{
-					{
-						Character: 'a',
-						Num:       20,
-					},
-				},
-			},
-		},
-		DestFiles: []SyncTestCaseFile{
-			{
-				RelPath: "a",
-				Pieces: []SyncTestCaseFilePiece{
-					{
-						Character: 'a',
-						Num:       10,
-					},
-				},
-			},
-		},
-		BlockSize: 10,
-		BytesSent: 10,
-		BytesSame: 10,
-		Directories: 1,
-		Files: 1,
-	}
-
-	buildAndRunLocalSyncTest(t, testcase)
+	buildAndRunLocalSyncTest(t, testcase2)
 
 	// run the same test with a block size larger than the file size
-	testcase.BlockSize = 100
-	buildAndRunLocalSyncTest(t, testcase)
+	testcase2.BlockSize = 100
+	buildAndRunLocalSyncTest(t, testcase2)
 }
 
-
-func assertFiles(t *testing.T, stats *TransferStats, files []SyncTestCaseFile, dir string){
+func assertFiles(t *testing.T, stats *TransferStats, files []SyncTestCaseFile, dir string) {
 
 	numFiles := 0
 	for _, f := range files {
@@ -176,8 +176,7 @@ func assertFiles(t *testing.T, stats *TransferStats, files []SyncTestCaseFile, d
 	}
 }
 
-
-func makeFiles(files []SyncTestCaseFile, dir string){
+func makeFiles(files []SyncTestCaseFile, dir string) {
 	for _, f := range files {
 
 		s := ""
@@ -190,19 +189,25 @@ func makeFiles(files []SyncTestCaseFile, dir string){
 			f.Mode = 0770
 		}
 		err := ioutil.WriteFile(path.Join(dir, f.RelPath), []byte(s), f.Mode)
-		if err != nil { panic(err) }
+		if err != nil {
+			panic(err)
+		}
 	}
 }
 
 // buildAndRunLocalSyncTest is a helper function that
-func buildAndRunLocalSyncTest(t *testing.T, testcase SyncTestCase) *TransferStats{
+func buildAndRunLocalSyncTest(t *testing.T, testcase SyncTestCase) *TransferStats {
 
 	source, err := ioutil.TempDir("/tmp", "gosync.source.")
-	if err != nil { panic(err) }
+	if err != nil {
+		panic(err)
+	}
 	defer os.RemoveAll(source)
 
 	destination, err := ioutil.TempDir("/tmp", "gosync.dest.")
-	if err != nil { panic(err) }
+	if err != nil {
+		panic(err)
+	}
 	defer os.RemoveAll(destination)
 
 	makeFiles(testcase.SourceFiles, source)
@@ -210,11 +215,11 @@ func buildAndRunLocalSyncTest(t *testing.T, testcase SyncTestCase) *TransferStat
 
 	opts := &Options{
 
-		Path: source,
+		Path:        source,
 		Destination: destination,
 
 		FollowLinks: false,
-		BlockSize: testcase.BlockSize,
+		BlockSize:   testcase.BlockSize,
 	}
 
 	stats, err := SyncLocal(opts)
@@ -242,4 +247,75 @@ func buildAndRunLocalSyncTest(t *testing.T, testcase SyncTestCase) *TransferStat
 			testcase.Directories, stats.Directories))
 	}
 	return stats
+}
+
+func buildAndRunNetSyncTest(t *testing.T, testcase SyncTestCase) *TransferStats {
+	// The trick here is to start both sides of a TCP connection, and pass each
+	// side to their various SyncOutgoing and SyncIncoming functions.
+
+	// We run both sides on the same host so we're treating the filepaths
+	// the same way we do when we're running a local sync
+	source, err := ioutil.TempDir("/tmp", "gosync.source.")
+	if err != nil {
+		panic(err)
+	}
+	defer os.RemoveAll(source)
+
+	destination, err := ioutil.TempDir("/tmp", "gosync.dest.")
+	if err != nil {
+		panic(err)
+	}
+	defer os.RemoveAll(destination)
+
+	makeFiles(testcase.SourceFiles, source)
+	makeFiles(testcase.DestFiles, destination)
+
+	opts := &Options{
+		SourceHost:    "localhost",
+		SourceUDPPort: 30000,
+
+		DestinationHost:    "localhost",
+		DestinationUDPPort: 30001,
+
+		Path:        source,
+		Destination: destination,
+
+		FollowLinks: false,
+		BlockSize:   testcase.BlockSize,
+	}
+
+	// gorouting to handle source side
+	go func() {
+		ln, err := net.Listen("tcp", "localhost:4038")
+
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		conn, err := ln.Accept()
+
+		if err != nil {
+			t.Error(err)
+			return
+		}
+
+		_, err = SyncOutgoing(conn, opts)
+
+		if err != nil {
+			t.Error(err)
+			return
+		}
+
+	}()
+
+	conn, err := net.Dial("tcp", "localhost:4038")
+	if err != nil {
+		t.Error(err)
+		return nil
+	}
+
+	stats, err := SyncIncoming(conn, opts)
+
+	return stats
+
 }

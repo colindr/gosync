@@ -36,6 +36,8 @@ type Manager interface {
 	// processed by the patch processor and the transfer is
 	// complete.
 	PatchDone()
+
+	Packeter() *Packeter
 	// ReportError should be called when an error has been
 	// reported, it will make sure all channels are closed
 	// and it will also make sure that InError() will return
@@ -65,7 +67,7 @@ type SourceTransferStatus struct {
 
 	SourcePacketerStatus      PacketerStatus
 
-	Failed                    error
+	Failed                    string
 }
 
 
@@ -75,5 +77,5 @@ type DestinationTransferStatus struct {
 
 	DestinationPacketerStatus   PacketerStatus
 
-	Failed                      error
+	Failed                      string
 }

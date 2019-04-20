@@ -6,26 +6,25 @@ import (
 )
 
 
-func SyncOutgoing(conn net.Conn, opts *Options, resp *RequestResponse) (*TransferStats, error) {
+func SyncOutgoing(conn net.Conn, opts *Options) (*TransferStats, error) {
 	// Verify request
 	if err := opts.Verify(); err != nil {
 		return nil, err
 	}
 
-	packeter := NewPacketer()
 	manager := NewSourceManager()
 
 	// packet decoder
-	go DecodePackets(manager, packeter)
+	go DecodePackets(manager)
 
 	// tcp loop passes transfer status information between source and dest
-	go TCPSourceLoop(conn, opts, packeter, manager)
+	go TCPSourceLoop(conn, opts, manager)
 
 	// start udp sender gorouting
-	go UDPSender(opts.DestinationHost, opts.DestinationUDPPort, opts, packeter, manager)
+	go UDPSender(opts.DestinationHost, opts.DestinationUDPPort, opts, manager)
 
 	// start udp receiver goroutine
-	go UDPReceiver(opts.SourceHost, opts.SourceUDPPort, opts, packeter, manager)
+	go UDPReceiver(opts.SourceHost, opts.SourceUDPPort, opts, manager)
 
 	// Outgoing transfer side only does Walk and deltas
 	go Walk(opts, manager)
@@ -43,26 +42,25 @@ func SyncOutgoing(conn net.Conn, opts *Options, resp *RequestResponse) (*Transfe
 
 }
 
-func SyncIncoming(conn net.Conn, opts *Options, resp *RequestResponse) (*TransferStats, error) {
+func SyncIncoming(conn net.Conn, opts *Options) (*TransferStats, error) {
 	// Verify request
 	if err := opts.Verify(); err != nil {
 		return nil, err
 	}
 
-	packeter := NewPacketer()
 	manager := NewDestinationManager()
 
 	// packet decoder
-	go DecodePackets(manager, packeter)
+	go DecodePackets(manager)
 
 	// tcp loop passes transfer status information between source and dest
-	go TCPDestinationLoop(conn, opts, packeter, manager)
+	go TCPDestinationLoop(conn, opts, manager)
 
 	// start udp sender gorouting
-	go UDPSender(opts.SourceHost, opts.SourceUDPPort, opts, packeter, manager)
+	go UDPSender(opts.SourceHost, opts.SourceUDPPort, opts, manager)
 
 	// start udp receiver goroutine
-	go UDPReceiver(opts.DestinationHost, opts.DestinationUDPPort, opts, packeter, manager)
+	go UDPReceiver(opts.DestinationHost, opts.DestinationUDPPort, opts, manager)
 
 	// Incoming transfer side only does signatures and patches
 	go ProcessSignatures(opts, manager)
