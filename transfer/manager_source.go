@@ -9,32 +9,32 @@ import (
 )
 
 type SourceManager struct {
-	packetChan            chan Packet
-	signatureChan         chan Checksum
+	packetChan    chan Packet
+	signatureChan chan Checksum
 
-	signatureClosed       bool
+	signatureClosed bool
 
-	latestFileInfoPacket  uint64
-	latestDeltaPacket     uint64
+	latestFileInfoPacket uint64
+	latestDeltaPacket    uint64
 
-	done                  bool
-	err                   error
+	done    bool
+	tcpdone bool
+	err     error
 
-	packeter              *Packeter
+	packeter *Packeter
 
-	status                *SourceTransferStatus
-	stats                 *TransferStats
+	status *SourceTransferStatus
+	stats  *TransferStats
 }
-
 
 func NewSourceManager() *SourceManager {
 
 	return &SourceManager{
-		packetChan: make(chan Packet, 100),
+		packetChan:    make(chan Packet, 100),
 		signatureChan: make(chan Checksum, SIGNATURE_BUF_SIZE),
-		stats: NewTransferStats(),
-		status: &SourceTransferStatus{},
-		packeter: NewPacketer(),
+		stats:         NewTransferStats(),
+		status:        &SourceTransferStatus{},
+		packeter:      NewPacketer(),
 	}
 }
 
@@ -42,7 +42,7 @@ func NewSourceManager() *SourceManager {
 // responsibility to call the packeter's "ReceivePacketerStatusUpdate" function
 // as well, because the packeter may need to resend some packets, or delete
 // some sent packets.
-func (manager *SourceManager) ReceiveStatusUpdate (status *DestinationTransferStatus) *SourceTransferStatus{
+func (manager *SourceManager) ReceiveStatusUpdate(status DestinationTransferStatus) SourceTransferStatus {
 
 	if status.Failed != "" {
 		manager.status.Failed = status.Failed
@@ -57,7 +57,7 @@ func (manager *SourceManager) ReceiveStatusUpdate (status *DestinationTransferSt
 	// All signature packets have been decoded, call SignatureDone
 	if status.LastSignaturePacket != 0 &&
 		manager.packeter.LastPacketDecoded >= status.LastSignaturePacket &&
-		!manager.signatureClosed{
+		!manager.signatureClosed {
 		manager.SignatureDone()
 	}
 
@@ -65,11 +65,10 @@ func (manager *SourceManager) ReceiveStatusUpdate (status *DestinationTransferSt
 		manager.PatchDone()
 	}
 
-	return manager.status
+	return *manager.status
 }
 
-
-func (manager *SourceManager) QueueFileInfo (fi FileInfo) {
+func (manager *SourceManager) QueueFileInfo(fi FileInfo) {
 	manager.stats.RecordFileInfo(fi)
 
 	var buff bytes.Buffer
@@ -90,7 +89,7 @@ func (manager *SourceManager) QueueFileInfo (fi FileInfo) {
 
 }
 
-func (manager *SourceManager) FileInfoDone () {
+func (manager *SourceManager) FileInfoDone() {
 	// record the latestFileInfoPacket as the LastFileInfoPacket
 	manager.status.LastFileInfoPacket = manager.latestFileInfoPacket
 }
@@ -99,7 +98,7 @@ func (manager *SourceManager) FileInfoChannel() chan FileInfo {
 	return nil
 }
 
-func (manager *SourceManager) QueueSignature (sig Checksum) {
+func (manager *SourceManager) QueueSignature(sig Checksum) {
 	manager.stats.RecordSignature(sig)
 	manager.signatureChan <- sig
 }
@@ -113,7 +112,7 @@ func (manager *SourceManager) SignatureChannel() chan Checksum {
 	return manager.signatureChan
 }
 
-func (manager *SourceManager) QueueDelta (delta Delta) {
+func (manager *SourceManager) QueueDelta(delta Delta) {
 	manager.stats.RecordDelta(delta)
 
 	var buff bytes.Buffer
@@ -150,7 +149,13 @@ func (manager *SourceManager) Packeter() *Packeter {
 	return manager.packeter
 }
 
+func (manager *SourceManager) TCPDone() {
+	manager.packeter.Close()
+	manager.tcpdone = true
+}
+
 func (manager *SourceManager) ReportError(err error) {
+	Debug(fmt.Sprintf("Error reported: %v", err))
 	stack := debug.Stack()
 	manager.err = fmt.Errorf("%s: %s", stack, err)
 	manager.status.Failed = fmt.Sprintf("%s: %s", stack, err)
@@ -163,6 +168,10 @@ func (manager *SourceManager) Error() error {
 
 func (manager *SourceManager) Done() bool {
 	return manager.done
+}
+
+func (manager *SourceManager) NetDone() bool {
+	return manager.packeter.Done() && manager.tcpdone
 }
 
 func (manager *SourceManager) Stats() *TransferStats {

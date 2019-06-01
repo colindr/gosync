@@ -4,27 +4,38 @@ import (
 	"os"
 )
 
-type TransferStats struct{
-	Files          int64
-	Symlinks       int64
-	Directories    int64
-	SourceSize     int64
-	BytesSent      int64
-	BytesSame      int64
-	BytesCopyDest  int64
-	SigCacheHits   int64
+type NetStats struct {
+	TCPLoopIterations int64
+}
+type TransferStats struct {
+	Files         int64
+	Symlinks      int64
+	Directories   int64
+	SourceSize    int64
+	BytesSent     int64
+	BytesSame     int64
+	BytesCopyDest int64
+	SigCacheHits  int64
+	NetStats      *NetStats
 }
 
 func NewTransferStats() *TransferStats {
 	return &TransferStats{
-		Files: int64(0),
-		Symlinks: int64(0),
-		Directories: int64(0),
-		SourceSize: int64(0),
-		BytesSent: int64(0),
+		Files:         int64(0),
+		Symlinks:      int64(0),
+		Directories:   int64(0),
+		SourceSize:    int64(0),
+		BytesSent:     int64(0),
 		BytesCopyDest: int64(0),
-		SigCacheHits: int64(0),
+		SigCacheHits:  int64(0),
+		NetStats: &NetStats{
+			TCPLoopIterations: int64(0),
+		},
 	}
+}
+
+func (s *TransferStats) RecordTCPLoopIteration() {
+	s.NetStats.TCPLoopIterations++
 }
 
 func (s *TransferStats) RecordFileInfo(fi FileInfo) {

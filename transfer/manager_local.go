@@ -1,14 +1,14 @@
 package transfer
 
 type LocalManager struct {
-	fileInfoChan       chan FileInfo
-	signatureChan      chan Checksum
-	deltaChan          chan Delta
+	fileInfoChan  chan FileInfo
+	signatureChan chan Checksum
+	deltaChan     chan Delta
 
-	done               bool
-	err                error
+	done bool
+	err  error
 
-	stats            *TransferStats
+	stats *TransferStats
 }
 
 // TODO: make these args?
@@ -19,19 +19,19 @@ var DELTA_BUF_SIZE = 10
 func MakeLocalManager() *LocalManager {
 
 	return &LocalManager{
-		fileInfoChan: make(chan FileInfo, FILE_INFO_BUF_SIZE),
+		fileInfoChan:  make(chan FileInfo, FILE_INFO_BUF_SIZE),
 		signatureChan: make(chan Checksum, SIGNATURE_BUF_SIZE),
-		deltaChan: make(chan Delta, DELTA_BUF_SIZE),
-		stats: NewTransferStats(),
+		deltaChan:     make(chan Delta, DELTA_BUF_SIZE),
+		stats:         NewTransferStats(),
 	}
 }
 
-func (manager *LocalManager) QueueFileInfo (fi FileInfo) {
+func (manager *LocalManager) QueueFileInfo(fi FileInfo) {
 	manager.stats.RecordFileInfo(fi)
 	manager.fileInfoChan <- fi
 }
 
-func (manager *LocalManager) FileInfoDone () {
+func (manager *LocalManager) FileInfoDone() {
 	close(manager.fileInfoChan)
 }
 
@@ -39,7 +39,7 @@ func (manager *LocalManager) FileInfoChannel() chan FileInfo {
 	return manager.fileInfoChan
 }
 
-func (manager *LocalManager) QueueSignature (sig Checksum) {
+func (manager *LocalManager) QueueSignature(sig Checksum) {
 	manager.stats.RecordSignature(sig)
 	manager.signatureChan <- sig
 }
@@ -52,7 +52,7 @@ func (manager *LocalManager) SignatureChannel() chan Checksum {
 	return manager.signatureChan
 }
 
-func (manager *LocalManager) QueueDelta (delta Delta) {
+func (manager *LocalManager) QueueDelta(delta Delta) {
 	manager.stats.RecordDelta(delta)
 	manager.deltaChan <- delta
 }
@@ -69,7 +69,7 @@ func (manager *LocalManager) PatchDone() {
 	manager.done = true
 }
 
-func (manager *LocalManager) Packeter() *Packeter{
+func (manager *LocalManager) Packeter() *Packeter {
 	return nil
 }
 
@@ -87,4 +87,12 @@ func (manager *LocalManager) Done() bool {
 
 func (manager *LocalManager) Stats() *TransferStats {
 	return manager.stats
+}
+
+func (manager *LocalManager) TCPDone() {
+
+}
+
+func (manager *LocalManager) NetDone() bool {
+	return true
 }

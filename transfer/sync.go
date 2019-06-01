@@ -1,12 +1,14 @@
 package transfer
 
 import (
+	"encoding/gob"
+	"golang.org/x/crypto/blake2b"
 	"net"
 	"time"
 )
 
-
 func SyncOutgoing(conn net.Conn, opts *Options) (*TransferStats, error) {
+	Debug("SyncOutgoing starting...")
 	// Verify request
 	if err := opts.Verify(); err != nil {
 		return nil, err
@@ -30,23 +32,27 @@ func SyncOutgoing(conn net.Conn, opts *Options) (*TransferStats, error) {
 	go Walk(opts, manager)
 	go ProcessDeltas(opts, manager)
 
+	defer Debug("SyncOutgoing done")
+
 	for {
 		if manager.Error() != nil {
 			return manager.Stats(), manager.Error()
-		} else if manager.Done() {
+		} else if manager.Done() && manager.NetDone() {
 			return manager.Stats(), nil
 		}
 		time.Sleep(1)
 	}
 
-
 }
 
 func SyncIncoming(conn net.Conn, opts *Options) (*TransferStats, error) {
+	Debug("SyncIncoming starting...")
 	// Verify request
 	if err := opts.Verify(); err != nil {
 		return nil, err
 	}
+	h, _ := blake2b.New256(make([]byte, 0))
+	gob.Register(h)
 
 	manager := NewDestinationManager()
 
@@ -66,10 +72,12 @@ func SyncIncoming(conn net.Conn, opts *Options) (*TransferStats, error) {
 	go ProcessSignatures(opts, manager)
 	go ProcessPatches(opts, manager)
 
+	defer Debug("SyncIncoming done")
+
 	for {
 		if manager.Error() != nil {
 			return manager.Stats(), manager.Error()
-		} else if manager.Done() {
+		} else if manager.Done() && manager.NetDone() {
 			return manager.Stats(), nil
 		}
 		time.Sleep(1)
@@ -92,7 +100,6 @@ func SyncLocal(opts *Options) (*TransferStats, error) {
 	go ProcessSignatures(opts, manager)
 	go ProcessDeltas(opts, manager)
 	go ProcessPatches(opts, manager)
-
 
 	for {
 		if manager.Error() != nil {

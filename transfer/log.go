@@ -1,9 +1,12 @@
 package transfer
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 func Debug(msg string) {
-	fmt.Printf("DEBUG: %s\n", msg)
+	fmt.Printf("%s - DEBUG: %s\n", time.Now(), msg)
 }
 
 func Info(msg string) {

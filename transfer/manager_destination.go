@@ -9,34 +9,34 @@ import (
 )
 
 type DestinationManager struct {
-	packetChan            chan Packet
-	fileInfoChan          chan FileInfo
-	deltaChan             chan Delta
+	packetChan   chan Packet
+	fileInfoChan chan FileInfo
+	deltaChan    chan Delta
 
-	fileInfoClosed        bool
-	deltaClosed           bool
+	fileInfoClosed bool
+	deltaClosed    bool
 
 	latestSignaturePacket uint64
 
-	done                  bool
-	err                   error
+	tcpdone bool
+	done    bool
+	err     error
 
-	packeter              *Packeter
+	packeter *Packeter
 
-	status                *DestinationTransferStatus
-	stats                 *TransferStats
+	status *DestinationTransferStatus
+	stats  *TransferStats
 }
-
 
 func NewDestinationManager() *DestinationManager {
 
 	return &DestinationManager{
-		packetChan: make(chan Packet, 100),
+		packetChan:   make(chan Packet, 100),
 		fileInfoChan: make(chan FileInfo, FILE_INFO_BUF_SIZE),
-		deltaChan: make(chan Delta, DELTA_BUF_SIZE),
-		status: &DestinationTransferStatus{},
-		stats: NewTransferStats(),
-		packeter: NewPacketer(),
+		deltaChan:    make(chan Delta, DELTA_BUF_SIZE),
+		status:       &DestinationTransferStatus{},
+		stats:        NewTransferStats(),
+		packeter:     NewPacketer(),
 	}
 }
 
@@ -44,7 +44,7 @@ func NewDestinationManager() *DestinationManager {
 // responsibility to call the packeter's "ReceivePacketerStatusUpdate" function
 // as well, because the packeter may need to resend some packets, or delete
 // some sent packets.
-func (manager *DestinationManager) ReceiveStatusUpdate (status *SourceTransferStatus) *DestinationTransferStatus{
+func (manager *DestinationManager) ReceiveStatusUpdate(status SourceTransferStatus) DestinationTransferStatus {
 
 	if status.Failed != "" {
 		manager.status.Failed = status.Failed
@@ -66,20 +66,19 @@ func (manager *DestinationManager) ReceiveStatusUpdate (status *SourceTransferSt
 	// All delta packets have been decoded, call DeltaDone
 	if status.LastDeltaPacket != 0 &&
 		manager.packeter.LastPacketDecoded >= status.LastDeltaPacket &&
-		!manager.deltaClosed{
+		!manager.deltaClosed {
 		manager.DeltaDone()
 	}
 
-	return manager.status
+	return *manager.status
 }
 
-
-func (manager *DestinationManager) QueueFileInfo (fi FileInfo) {
+func (manager *DestinationManager) QueueFileInfo(fi FileInfo) {
 	manager.stats.RecordFileInfo(fi)
 	manager.fileInfoChan <- fi
 }
 
-func (manager *DestinationManager) FileInfoDone () {
+func (manager *DestinationManager) FileInfoDone() {
 	manager.fileInfoClosed = true
 	close(manager.fileInfoChan)
 }
@@ -88,7 +87,7 @@ func (manager *DestinationManager) FileInfoChannel() chan FileInfo {
 	return manager.fileInfoChan
 }
 
-func (manager *DestinationManager) QueueSignature (sig Checksum) {
+func (manager *DestinationManager) QueueSignature(sig Checksum) {
 	manager.stats.RecordSignature(sig)
 
 	var buff bytes.Buffer
@@ -117,7 +116,7 @@ func (manager *DestinationManager) SignatureChannel() chan Checksum {
 	return nil
 }
 
-func (manager *DestinationManager) QueueDelta (delta Delta) {
+func (manager *DestinationManager) QueueDelta(delta Delta) {
 	manager.stats.RecordDelta(delta)
 	manager.deltaChan <- delta
 }
@@ -133,13 +132,20 @@ func (manager *DestinationManager) DeltaChannel() chan Delta {
 
 func (manager *DestinationManager) PatchDone() {
 	manager.status.PatchDone = true
+	manager.done = true
 }
 
 func (manager *DestinationManager) Packeter() *Packeter {
 	return manager.packeter
 }
 
+func (manager *DestinationManager) TCPDone() {
+	manager.packeter.Close()
+	manager.tcpdone = true
+}
+
 func (manager *DestinationManager) ReportError(err error) {
+	Debug(fmt.Sprintf("Error reported: %v", err))
 	stack := debug.Stack()
 	manager.err = fmt.Errorf("%s: %s", stack, err)
 	manager.status.Failed = fmt.Sprintf("%s: %s", stack, err)
@@ -151,6 +157,10 @@ func (manager *DestinationManager) Error() error {
 
 func (manager *DestinationManager) Done() bool {
 	return manager.done
+}
+
+func (manager *DestinationManager) NetDone() bool {
+	return manager.packeter.Done() && manager.tcpdone
 }
 
 func (manager *DestinationManager) Stats() *TransferStats {

@@ -1,6 +1,5 @@
 package transfer
 
-
 type Manager interface {
 	// QueueFileInfo will queue a FileInfo that will be
 	// sent to the signature processor
@@ -38,6 +37,10 @@ type Manager interface {
 	PatchDone()
 
 	Packeter() *Packeter
+	// TCPDone is called by the TCP loops when they are done.
+	// It tells the manager that those loops are no longer
+	// running.
+	TCPDone()
 	// ReportError should be called when an error has been
 	// reported, it will make sure all channels are closed
 	// and it will also make sure that InError() will return
@@ -48,9 +51,10 @@ type Manager interface {
 	Error() error
 	// Done returns true PatchDone was called
 	Done() bool
+	// NetDone returns true when all net communication is done
+	NetDone() bool
 	// Stats returns the stats recorded by the manager
 	Stats() *TransferStats
-
 }
 
 // TransferStatus is a struct that represents
@@ -62,20 +66,19 @@ type SourceTransferStatus struct {
 	// DestinationManager will use these indexes to know when
 	// they've finished receiving packets and can close various
 	// channels.
-	LastFileInfoPacket        uint64
-	LastDeltaPacket           uint64
+	LastFileInfoPacket uint64
+	LastDeltaPacket    uint64
 
-	SourcePacketerStatus      PacketerStatus
+	SourcePacketerStatus PacketerStatus
 
-	Failed                    string
+	Failed string
 }
 
-
 type DestinationTransferStatus struct {
-	LastSignaturePacket         uint64
-	PatchDone                   bool
+	LastSignaturePacket uint64
+	PatchDone           bool
 
-	DestinationPacketerStatus   PacketerStatus
+	DestinationPacketerStatus PacketerStatus
 
-	Failed                      string
+	Failed string
 }

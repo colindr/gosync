@@ -32,7 +32,7 @@ type SyncTestCase struct {
 	Directories int64
 }
 
-var testcase1 = SyncTestCase{
+var testcasebasic = SyncTestCase{
 	SourceFiles: []SyncTestCaseFile{
 		{
 			RelPath: "a",
@@ -61,7 +61,7 @@ var testcase1 = SyncTestCase{
 	Files:       2,
 }
 
-var testcase2 = SyncTestCase{
+var testcasechecksum = SyncTestCase{
 	SourceFiles: []SyncTestCaseFile{
 		{
 			RelPath: "a",
@@ -125,26 +125,49 @@ func TestAbsPathVerify(t *testing.T) {
 	}
 }
 
-func TestSimpleSyncLocal(t *testing.T) {
-
-	buildAndRunLocalSyncTest(t, testcase1)
-
-	// run the same test with a block size larger than the file size
-	testcase1.BlockSize = 4096
-	buildAndRunLocalSyncTest(t, testcase1)
+func TestBasicLocal(t *testing.T) {
+	testcase := testcasebasic
+	buildAndRunLocalSyncTest(t, testcase)
 }
 
-func TestSimpleNetSync(t *testing.T) {
-	buildAndRunNetSyncTest(t, testcase1)
+func TestBasicLocalLargeBlocksize(t *testing.T) {
+	testcase := testcasebasic
+	// run the same test with a block size larger than the file size
+	testcase.BlockSize = 4096
+	buildAndRunLocalSyncTest(t, testcase)
 }
 
-func TestChecksumSyncLocal(t *testing.T) {
+func TestBasicNet(t *testing.T) {
+	testcase := testcasebasic
+	buildAndRunNetSyncTest(t, testcase)
+}
 
-	buildAndRunLocalSyncTest(t, testcase2)
+func TestBasicNetLargeBlocksize(t *testing.T) {
+	testcase := testcasebasic
+	// run the same test with a block size larger than the file size
+	testcase.BlockSize = 4096
+	buildAndRunNetSyncTest(t, testcase)
+}
+
+func TestChecksumLocal(t *testing.T) {
+	testcase := testcasechecksum
+	buildAndRunLocalSyncTest(t, testcase)
 
 	// run the same test with a block size larger than the file size
-	testcase2.BlockSize = 100
-	buildAndRunLocalSyncTest(t, testcase2)
+	testcase.BlockSize = 100
+	buildAndRunLocalSyncTest(t, testcase)
+}
+
+func TestChecksumNet(t *testing.T) {
+	testcase := testcasechecksum
+	buildAndRunNetSyncTest(t, testcase)
+}
+
+func TestChecksumNetLargeBlocksize(t *testing.T) {
+	testcase := testcasechecksum
+	// run the same test with a block size larger than the file size
+	testcase.BlockSize = 100
+	buildAndRunNetSyncTest(t, testcase)
 }
 
 func assertFiles(t *testing.T, stats *TransferStats, files []SyncTestCaseFile, dir string) {
@@ -284,8 +307,11 @@ func buildAndRunNetSyncTest(t *testing.T, testcase SyncTestCase) *TransferStats 
 		BlockSize:   testcase.BlockSize,
 	}
 
+	listenerDone := make(chan bool)
 	// gorouting to handle source side
 	go func() {
+		defer close(listenerDone)
+
 		ln, err := net.Listen("tcp", "localhost:4038")
 
 		if err != nil {
@@ -298,6 +324,22 @@ func buildAndRunNetSyncTest(t *testing.T, testcase SyncTestCase) *TransferStats 
 			t.Error(err)
 			return
 		}
+
+		// clean up ln
+		defer func() {
+			lnFile, err := ln.(*net.TCPListener).File()
+			if err != nil {
+				t.Error(err)
+			}
+
+			if err := ln.Close(); err != nil {
+				t.Error(err)
+			}
+
+			if err := lnFile.Close(); err != nil {
+				t.Error(err)
+			}
+		}()
 
 		_, err = SyncOutgoing(conn, opts)
 
@@ -315,6 +357,8 @@ func buildAndRunNetSyncTest(t *testing.T, testcase SyncTestCase) *TransferStats 
 	}
 
 	stats, err := SyncIncoming(conn, opts)
+
+	<-listenerDone
 
 	return stats
 
