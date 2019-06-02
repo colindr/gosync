@@ -308,6 +308,8 @@ func buildAndRunNetSyncTest(t *testing.T, testcase SyncTestCase) *TransferStats 
 	}
 
 	listenerDone := make(chan bool)
+
+	var outstats *TransferStats
 	// gorouting to handle source side
 	go func() {
 		defer close(listenerDone)
@@ -341,7 +343,7 @@ func buildAndRunNetSyncTest(t *testing.T, testcase SyncTestCase) *TransferStats 
 			}
 		}()
 
-		_, err = SyncOutgoing(conn, opts)
+		outstats, err = SyncOutgoing(conn, opts)
 
 		if err != nil {
 			t.Error(err)
@@ -358,7 +360,24 @@ func buildAndRunNetSyncTest(t *testing.T, testcase SyncTestCase) *TransferStats 
 
 	stats, err := SyncIncoming(conn, opts)
 
+	if err != nil {
+		t.Error(err)
+	}
+
 	<-listenerDone
+
+	if stats.NetStats.ResentDestinationPackets != outstats.NetStats.ResentDestinationPackets {
+		t.Error(fmt.Sprintf("stats and outstats ResentDestinationPackets "+
+			"should be equal (%v != %v)",
+			stats.NetStats.ResentDestinationPackets,
+			outstats.NetStats.ResentDestinationPackets))
+	}
+	if stats.NetStats.ResentSourcePackets != outstats.NetStats.ResentSourcePackets {
+		t.Error(fmt.Sprintf("stats and outstats ResentSourcePackets "+
+			"should be equal (%v != %v)",
+			stats.NetStats.ResentSourcePackets,
+			outstats.NetStats.ResentSourcePackets))
+	}
 
 	return stats
 

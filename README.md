@@ -18,11 +18,11 @@ Experiment in golang to sync files.
 - [x] Finish/Test v1 of net communication
 - [x] Fix initial net communication bugs
 - [ ] Add net communication stats
-- [ ] Implement new udp encoding (can't re-use gob 
-  encoder/decoder because packets can get dropped)
-- [ ] Implement better packet resend logic
 - [ ] Handle Symlinks
 - [ ] Support preserving file mode/uid/gid/modtime
 - [ ] Add NoOp Signature for same mtime/size
 - [ ] Add Signature Hash
 - [ ] Make integration tests
+- [ ] Implement new udp encoding (can't re-use gob 
+  encoder/decoder because packets can get dropped)
+- [ ] Implement better packet resend logic

@@ -5,7 +5,9 @@ import (
 )
 
 type NetStats struct {
-	TCPLoopIterations int64
+	TCPLoopIterations        int64
+	ResentSourcePackets      int64
+	ResentDestinationPackets int64
 }
 type TransferStats struct {
 	Files         int64
@@ -29,13 +31,23 @@ func NewTransferStats() *TransferStats {
 		BytesCopyDest: int64(0),
 		SigCacheHits:  int64(0),
 		NetStats: &NetStats{
-			TCPLoopIterations: int64(0),
+			TCPLoopIterations:        int64(0),
+			ResentSourcePackets:      int64(0),
+			ResentDestinationPackets: int64(0),
 		},
 	}
 }
 
 func (s *TransferStats) RecordTCPLoopIteration() {
 	s.NetStats.TCPLoopIterations++
+}
+
+func (s *TransferStats) RecordResentSourcePackets(n int) {
+	s.NetStats.ResentSourcePackets += int64(n)
+}
+
+func (s *TransferStats) RecordResentDestinationPackets(n int) {
+	s.NetStats.ResentDestinationPackets += int64(n)
 }
 
 func (s *TransferStats) RecordFileInfo(fi FileInfo) {

@@ -31,12 +31,12 @@ func TCPSourceLoop(conn net.Conn, opts *Options, manager *SourceManager) {
 	decoder := gob.NewDecoder(conn)
 	encoder := gob.NewEncoder(conn)
 
-	destStatus := DestinationTransferStatus{}
-	sourceStatus := SourceTransferStatus{}
-
 	sentError := ""
 
+	sourceStatus := SourceTransferStatus{}
+
 	for !manager.Done() && sentError == "" {
+		destStatus := DestinationTransferStatus{}
 
 		manager.stats.RecordTCPLoopIteration()
 
@@ -118,13 +118,14 @@ func TCPDestinationLoop(conn net.Conn, opts *Options, manager *DestinationManage
 	decoder := gob.NewDecoder(conn)
 	encoder := gob.NewEncoder(conn)
 
-	destStatus := DestinationTransferStatus{}
-	sourceStatus := SourceTransferStatus{}
-
 	sentError := ""
 	sentPatchDone := false
 
+	destStatus := DestinationTransferStatus{}
+
 	for !sentPatchDone && sentError == "" {
+
+		sourceStatus := SourceTransferStatus{}
 
 		manager.stats.RecordTCPLoopIteration()
 

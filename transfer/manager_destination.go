@@ -51,10 +51,18 @@ func (manager *DestinationManager) ReceiveStatusUpdate(status SourceTransferStat
 		manager.err = errors.New(status.Failed)
 	}
 
+	// Record the number of packets the source is requesting to be resent
+	manager.stats.RecordResentSourcePackets(
+		len(status.SourcePacketerStatus.ResendPackets))
+
 	// Tell the packeter about it's counterpart's status. The packeter then
 	// return's it's status, which will be sent by the TCPer on it's next iteration.
 	manager.status.DestinationPacketerStatus = manager.packeter.ReceivePacketerStatusUpdate(
 		status.SourcePacketerStatus)
+
+	// Record the number of packets the destination is requesting to be resent
+	manager.stats.RecordResentDestinationPackets(
+		len(manager.status.DestinationPacketerStatus.ResendPackets))
 
 	// All FileInfo packets have been decoded, call FileInfoDone
 	if status.LastFileInfoPacket != 0 &&
