@@ -75,6 +75,10 @@ type RequestResponse struct {
 // Path and Destination are absolute.
 func (opts Options) Verify() error {
 
+	if opts.BlockSize <= 0 {
+		return errors.New(fmt.Sprintf(
+			"BlockSize must be larger than 0: %v", opts.BlockSize))
+	}
 	if ! path.IsAbs(opts.Path){
 		return errors.New(fmt.Sprintf(
 			"Path attribute is not an absolute path: %v", opts.Path))

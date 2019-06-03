@@ -11,7 +11,9 @@ type FileInfo struct {
 	Mode            os.FileMode
 	Size            int64
 	// uid/gid
+
 	ModTime         time.Time
+	Target          string
 	SourcePath      string
 	DestinationPath string
 }
@@ -36,6 +38,13 @@ func Walk(opts *Options, manager Manager) {
 			SourcePath: path,
 			DestinationPath: destPath,
 			ModTime: info.ModTime(),
+		}
+
+		// Record symlink target
+		if info.Mode() & os.ModeSymlink == os.ModeSymlink {
+			if t.Target, err = os.Readlink(path); err != nil {
+				return err
+			}
 		}
 
 		manager.QueueFileInfo(t)

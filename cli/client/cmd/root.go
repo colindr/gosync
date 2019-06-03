@@ -143,7 +143,9 @@ func NewRequestFromSourceAndDestination(source string, dest string) (*transfer.R
 		Path: path,
 		Destination: destination,
 
+		// TODO: options
 		FollowLinks: false,
+		BlockSize: 4096,
 
 	}, nil
 
