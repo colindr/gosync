@@ -18,6 +18,7 @@ type SyncTestCaseFilePiece struct {
 
 type SyncTestCaseFile struct {
 	RelPath string
+	Target  string  // Target is only for symlinks
 	Mode    os.FileMode
 	Pieces  []SyncTestCaseFilePiece
 }
@@ -30,6 +31,7 @@ type SyncTestCase struct {
 	BytesSame   int64
 	Files       int64
 	Directories int64
+	Symlinks    int64
 }
 
 var testcasebasic = SyncTestCase{
@@ -89,6 +91,33 @@ var testcasechecksum = SyncTestCase{
 	BytesSame:   10,
 	Directories: 1,
 	Files:       1,
+}
+
+var testcasesymlink = SyncTestCase{
+	SourceFiles: []SyncTestCaseFile{
+		{
+			RelPath: "link",
+			Mode: os.ModeSymlink | 0777,
+			Target: "target",
+			Pieces: []SyncTestCaseFilePiece{},
+		},
+		{
+			RelPath: "target",
+			Pieces: []SyncTestCaseFilePiece{
+				{
+					Character: 'x',
+					Num:       20,
+				},
+			},
+		},
+	},
+	DestFiles:   []SyncTestCaseFile{},
+	BlockSize:   10,
+	BytesSent:   20,
+	BytesSame:   0,
+	Directories: 1,
+	Files:       1,
+	Symlinks:    1,
 }
 
 func TestAbsPathVerify(t *testing.T) {
@@ -170,51 +199,98 @@ func TestChecksumNetLargeBlocksize(t *testing.T) {
 	buildAndRunNetSyncTest(t, testcase)
 }
 
+func TestSymlinkLocal(t *testing.T) {
+	testcase := testcasesymlink
+	buildAndRunLocalSyncTest(t, testcase)
+}
+
+func TestSymlinkNet(t *testing.T) {
+	testcase := testcasesymlink
+	buildAndRunNetSyncTest(t, testcase)
+}
+
+
 func assertFiles(t *testing.T, stats *TransferStats, files []SyncTestCaseFile, dir string) {
 
 	numFiles := 0
+	numLinks := 0
 	for _, f := range files {
-		numFiles += 1
 		filepath := path.Join(dir, f.RelPath)
-		actualcontent, err := ioutil.ReadFile(filepath)
+		s, err := os.Lstat(filepath)
 		if err != nil {
-			t.Error(err)
+			panic(err)
 		}
 
-		expected := ""
-		for _, p := range f.Pieces {
-			expected += strings.Repeat(string(p.Character), p.Num)
-		}
+		if s.Mode() & os.ModeSymlink == os.ModeSymlink {
+			numLinks += 1
 
-		if !bytes.Equal(actualcontent, []byte(expected)) {
-			t.Error(fmt.Sprintf("output %s was wrong", filepath))
+			if f.Mode & os.ModeSymlink != os.ModeSymlink {
+				t.Error(fmt.Sprintf("%v should have been a symlink", f.RelPath))
+			}
+
+			lpath, err := os.Readlink(filepath)
+			if err != nil{
+				panic(err)
+			}
+
+			if lpath != f.Target {
+				t.Error(fmt.Sprintf("Target of %v was %v instead of %v",
+					f.RelPath,
+					lpath,
+					f.Target))
+			}
+		}else{
+			numFiles += 1
+
+			actualcontent, err := ioutil.ReadFile(filepath)
+			if err != nil {
+				t.Error(err)
+			}
+
+			expected := ""
+			for _, p := range f.Pieces {
+				expected += strings.Repeat(string(p.Character), p.Num)
+			}
+
+			if !bytes.Equal(actualcontent, []byte(expected)) {
+				t.Error(fmt.Sprintf("output %s was wrong", filepath))
+			}
 		}
 	}
 
 	if stats.Files != int64(numFiles) {
 		t.Error(
 			fmt.Sprintf("reported stats.Files should be %v instead of %v",
-				numFiles,
-				stats.Files))
+				stats.Files,
+				numFiles))
 	}
 }
 
 func makeFiles(files []SyncTestCaseFile, dir string) {
 	for _, f := range files {
 
-		s := ""
-		for _, p := range f.Pieces {
-			s += strings.Repeat(string(p.Character), p.Num)
+		if f.Mode & os.ModeSymlink != 0 {
+
+			if err := os.Symlink(f.Target, path.Join(dir, f.RelPath)); err != nil {
+				panic(err)
+			}
+
+		} else {
+			s := ""
+			for _, p := range f.Pieces {
+				s += strings.Repeat(string(p.Character), p.Num)
+			}
+
+			// if mode is not specified, set to 0770
+			if f.Mode == 0 {
+				f.Mode = 0770
+			}
+			err := ioutil.WriteFile(path.Join(dir, f.RelPath), []byte(s), f.Mode)
+			if err != nil {
+				panic(err)
+			}
 		}
 
-		// if mode is not specified, set to 0770
-		if f.Mode == 0 {
-			f.Mode = 0770
-		}
-		err := ioutil.WriteFile(path.Join(dir, f.RelPath), []byte(s), f.Mode)
-		if err != nil {
-			panic(err)
-		}
 	}
 }
 
@@ -248,7 +324,7 @@ func buildAndRunLocalSyncTest(t *testing.T, testcase SyncTestCase) *TransferStat
 	stats, err := SyncLocal(opts)
 
 	if err != nil {
-		t.Error(err)
+		panic(err)
 	}
 
 	assertFiles(t, stats, testcase.SourceFiles, destination)

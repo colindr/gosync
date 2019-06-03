@@ -25,9 +25,22 @@ func ProcessSignatures(opts *Options, manager Manager) {
 
 		if fileinfo.Mode.IsDir() {
 			// It's a directory, we just create the directory and continue
-			os.Mkdir(fileinfo.DestinationPath, fileinfo.Mode)
+			if err = os.Mkdir(fileinfo.DestinationPath, fileinfo.Mode); err != nil{
+				if ! os.IsExist(err) {
+					manager.ReportError(err)
+					return
+				}
+			}
 
 			//TODO: chown and chmod if possible
+
+			continue
+		} else if fileinfo.Mode & os.ModeSymlink == os.ModeSymlink {
+			// It's a symlink, just make it and continue
+			if err = os.Symlink(fileinfo.Target, fileinfo.DestinationPath); err != nil{
+				manager.ReportError(err)
+				return
+			}
 
 			continue
 		}
